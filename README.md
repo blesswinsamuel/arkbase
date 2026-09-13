@@ -49,20 +49,23 @@
 
 ## 🚀 Quickstart
 
-### 1. Instant Local Sandbox with `local-compose`
+### Instant Local Dev (Zero-Docker with `local-compose`, Nix & Bun)
 
-If you use [local-compose](https://github.com/blesswinsamuel/local-compose), you can start an ephemeral PostgreSQL 17 test database (pre-seeded with sample data), the Go API backend, and the React frontend with one command:
+If you have [`local-compose`](https://github.com/blesswinsamuel/local-compose), [Nix](https://nixos.org/), and [Bun](https://bun.sh/) installed, clone and run:
 
 ```bash
-local-compose up
+local-compose up -d
 ```
-
-- **Dashboard with HMR**: `http://localhost:3000`
-- **API & Interactive Docs**: `http://localhost:8080/docs`
+This automatically:
+- Starts a native PostgreSQL 17 instance via Nix (storing data in `./data/postgres`) and auto-seeds it with sample tables and records (`testdata/seed.sql`).
+- Starts the `arkbase` Go daemon (`go run ./cmd/arkbase run --config config.dev.yaml`).
+- Launches the Vite React frontend on `http://localhost:3000` with live HMR using Bun.
 
 ---
 
-### 2. Standalone Deployment with `config.yaml`
+### Run with Docker or Docker Compose
+
+#### 1. Create a `config.yaml`
 
 ```yaml
 server:

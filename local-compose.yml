@@ -2,23 +2,16 @@ version: "1"
 name: arkbase
 
 services:
-  # Ephemeral PostgreSQL 17 test database pre-seeded with testdata/seed.sql
+  # 1. Native PostgreSQL 17 managed via Nix
   postgres:
-    command: >-
-      docker run --rm --name arkbase-dev-pg
-      -p 5432:5432
-      -e POSTGRES_USER=postgres
-      -e POSTGRES_PASSWORD=postgres
-      -e POSTGRES_DB=dev_db
-      -v ./testdata/seed.sql:/docker-entrypoint-initdb.d/init.sql:ro
-      postgres:17-alpine
+    command: nix shell nixpkgs#postgresql --command ./scripts/dev-postgres.sh
     healthcheck:
-      test: ["CMD", "docker", "exec", "arkbase-dev-pg", "pg_isready", "-U", "postgres", "-d", "dev_db"]
-      interval: 2s
-      retries: 15
+      test: ["CMD", "nix", "shell", "nixpkgs#postgresql", "--command", "pg_isready", "-h", "localhost", "-p", "5432", "-U", "postgres", "-d", "dev_db"]
+      interval: 1s
+      retries: 25
       timeout: 2s
 
-  # Go API & Scheduler daemon
+  # 2. Go API Server (daemon)
   api:
     command: go run ./cmd/arkbase run --config config.dev.yaml
     depends_on:
@@ -26,11 +19,11 @@ services:
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/status"]
       interval: 2s
-      retries: 10
+      retries: 15
       timeout: 2s
 
-  # React Frontend dev server with HMR (proxied to API on port 8080)
+  # 3. Vite React Frontend via Bun with HMR
   web:
-    command: bun run --cwd frontend dev --port 3000
+    command: bun --cwd frontend dev --port 3000
     depends_on:
       api: { condition: service_healthy }
