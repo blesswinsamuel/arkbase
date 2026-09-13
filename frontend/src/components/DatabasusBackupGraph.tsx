@@ -3,7 +3,7 @@ import type { RunDetail } from '@/api/client';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { CheckCircle2, XCircle, Clock, Activity, Zap } from 'lucide-react';
+import { CheckCircle2, XCircle, Clock, Activity, Zap, RefreshCw, Terminal } from 'lucide-react';
 import { formatBytes, formatDate, formatTimeAgo } from '@/lib/formatters';
 
 interface Props {
@@ -126,27 +126,58 @@ export function DatabasusBackupGraph({ runs, onSelectRun }: Props) {
                             : 'bg-red-500 hover:bg-red-400'
                         }`}
                       />
-                      <TooltipContent side="top" className="text-xs p-2.5 max-w-xs space-y-1">
-                        <div className="flex items-center justify-between gap-2 font-semibold">
-                          <span className="capitalize">{run.status}</span>
-                          <span className="text-[10px] text-zinc-400 font-mono">
+                      <TooltipContent 
+                        side="top" 
+                        sideOffset={6}
+                        className="w-64 p-3 space-y-2 rounded-lg border shadow-xl bg-popover text-popover-foreground text-xs"
+                      >
+                        {/* Header: Status & Relative Time */}
+                        <div className="flex items-center justify-between pb-1.5 border-b border-border/60">
+                          <div className="flex items-center gap-1.5 font-semibold">
+                            {isSuccess ? (
+                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                            ) : isRunning ? (
+                              <RefreshCw className="h-3.5 w-3.5 text-sky-500 animate-spin shrink-0" />
+                            ) : (
+                              <XCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />
+                            )}
+                            <span className="capitalize">{run.status}</span>
+                          </div>
+                          <span className="text-[11px] text-muted-foreground font-mono">
                             {formatTimeAgo(run.started_at)}
                           </span>
                         </div>
-                        <div className="text-[11px] text-zinc-300">
-                          {formatDate(run.started_at)}
+
+                        {/* Timestamp & Metrics */}
+                        <div className="space-y-1">
+                          <div className="text-[11px] text-muted-foreground">
+                            {formatDate(run.started_at)}
+                          </div>
+                          <div className="flex items-center justify-between pt-0.5 text-xs font-mono">
+                            <span className="text-muted-foreground">Duration:</span>
+                            <span className="font-semibold text-foreground">{run.duration_ms} ms</span>
+                          </div>
+                          <div className="flex items-center justify-between text-xs font-mono">
+                            <span className="text-muted-foreground">Output Size:</span>
+                            <span className="font-semibold text-foreground">{formatBytes(run.size_bytes)}</span>
+                          </div>
                         </div>
-                        <div className="text-[11px] text-zinc-400 flex gap-2 font-mono">
-                          <span>{run.duration_ms}ms</span>
-                          <span>•</span>
-                          <span>{formatBytes(run.size_bytes)}</span>
-                        </div>
+
+                        {/* Destinations */}
                         {run.destinations && run.destinations.length > 0 && (
-                          <div className="text-[10px] text-zinc-400 truncate">
-                            Targets: {run.destinations.join(', ')}
+                          <div className="pt-1.5 border-t border-border/50 text-[11px] flex items-center justify-between">
+                            <span className="text-muted-foreground">Targets:</span>
+                            <span className="font-mono text-foreground font-medium truncate max-w-[150px]">
+                              {run.destinations.join(', ')}
+                            </span>
                           </div>
                         )}
-                        <div className="text-[10px] text-sky-400 pt-0.5">Click to view logs</div>
+
+                        {/* Call to action */}
+                        <div className="pt-1 border-t border-border/50 text-[10px] text-primary font-medium flex items-center gap-1">
+                          <Terminal className="h-3 w-3" />
+                          <span>Click to inspect logs</span>
+                        </div>
                       </TooltipContent>
                     </Tooltip>
                   );
