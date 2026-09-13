@@ -44,42 +44,42 @@ export function Navbar() {
             <NavLink
               to="/databases"
               className={({ isActive }) =>
-                `flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                `flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
                   isActive
-                    ? 'bg-primary/10 text-primary font-semibold'
+                    ? 'bg-secondary text-foreground font-semibold shadow-xs border border-border/70'
                     : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
                 }`
               }
             >
-              <Database className="h-4 w-4" />
+              <Database className="h-4 w-4 text-primary" />
               <span>Databases</span>
             </NavLink>
 
             <NavLink
               to="/history"
               className={({ isActive }) =>
-                `flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                `flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
                   isActive
-                    ? 'bg-primary/10 text-primary font-semibold'
+                    ? 'bg-secondary text-foreground font-semibold shadow-xs border border-border/70'
                     : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
                 }`
               }
             >
-              <Clock className="h-4 w-4" />
+              <Clock className="h-4 w-4 text-primary" />
               <span>Backup History</span>
             </NavLink>
 
             <NavLink
               to="/destinations"
               className={({ isActive }) =>
-                `flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                `flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
                   isActive
-                    ? 'bg-primary/10 text-primary font-semibold'
+                    ? 'bg-secondary text-foreground font-semibold shadow-xs border border-border/70'
                     : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
                 }`
               }
             >
-              <HardDrive className="h-4 w-4" />
+              <HardDrive className="h-4 w-4 text-primary" />
               <span>Storage Destinations</span>
             </NavLink>
           </nav>
