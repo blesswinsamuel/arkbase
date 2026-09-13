@@ -7,6 +7,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
 	"text/template"
 	"time"
@@ -277,6 +279,96 @@ func interpolatePath(pathTemplate, dbName, engine, timestamp string) (string, er
 	return buf.String(), nil
 }
 
+// StorageBackupItem represents a physical backup file stored in a destination target
+type StorageBackupItem struct {
+	Database        string    `json:"database"`
+	Destination     string    `json:"destination"`
+	DestinationType string    `json:"destination_type"`
+	Path            string    `json:"path"`
+	Filename        string    `json:"filename"`
+	SizeBytes       int64     `json:"size_bytes"`
+	ModTime         time.Time `json:"mod_time"`
+	Encrypted       bool      `json:"encrypted"`
+}
+
+// ListDatabaseBackups queries the storage targets configured for a database and returns matching backup files
+func (r *Runner) ListDatabaseBackups(ctx context.Context, dbName, destinationFilter string) ([]StorageBackupItem, error) {
+	dbCfg, ok := r.cfg.Databases[dbName]
+	if !ok {
+		return nil, fmt.Errorf("database %q not found in config", dbName)
+	}
+
+	var allItems []StorageBackupItem
+
+	for _, destName := range dbCfg.Destinations {
+		if destinationFilter != "" && destName != destinationFilter {
+			continue
+		}
+
+		destCfg, ok := r.cfg.Destinations[destName]
+		if !ok {
+			continue
+		}
+
+		target, ok := r.destinations[destName]
+		if !ok {
+			continue
+		}
+
+		// Interpolate with placeholder to find the directory and filename pattern
+		interpolated, err := interpolatePath(destCfg.Path, dbName, dbCfg.Engine, "__TS__")
+		if err != nil {
+			log.Warn().Err(err).Str("destination", destName).Msg("failed to interpolate path for backup list")
+			continue
+		}
+
+		dir := filepath.Dir(interpolated)
+		baseFilename := filepath.Base(interpolated)
+		var prefixMatch, suffixMatch string
+		if strings.Contains(baseFilename, "__TS__") {
+			parts := strings.SplitN(baseFilename, "__TS__", 2)
+			prefixMatch = parts[0]
+			suffixMatch = parts[1]
+		}
+
+		items, err := target.List(ctx, dir)
+		if err != nil {
+			log.Warn().Err(err).Str("destination", destName).Msg("failed to list destination files")
+			continue
+		}
+
+		isEncrypted := destCfg.Encryption != nil && destCfg.Encryption.Enabled
+
+		for _, item := range items {
+			fname := filepath.Base(item.Path)
+			if prefixMatch != "" && !strings.HasPrefix(fname, prefixMatch) {
+				continue
+			}
+			if suffixMatch != "" && !strings.HasSuffix(fname, suffixMatch) {
+				continue
+			}
+
+			allItems = append(allItems, StorageBackupItem{
+				Database:        dbName,
+				Destination:     destName,
+				DestinationType: string(destCfg.Type),
+				Path:            item.Path,
+				Filename:        fname,
+				SizeBytes:       item.Size,
+				ModTime:         item.ModTime,
+				Encrypted:       isEncrypted,
+			})
+		}
+	}
+
+	// Sort newest first
+	sort.Slice(allItems, func(i, j int) bool {
+		return allItems[i].ModTime.After(allItems[j].ModTime)
+	})
+
+	return allItems, nil
+}
+
 // RestoreBackup restores a backup file from a storage destination into a target database
 func (r *Runner) RestoreBackup(ctx context.Context, dbName, destName, backupPath string, logWriter io.Writer) error {
 	dbCfg, ok := r.cfg.Databases[dbName]
@@ -297,6 +389,25 @@ func (r *Runner) RestoreBackup(ctx context.Context, dbName, destName, backupPath
 		return err
 	}
 
+	r.runningMu.Lock()
+	if r.runningJobs[dbName] {
+		r.runningMu.Unlock()
+		return fmt.Errorf("database %q has an active backup or restore in progress", dbName)
+	}
+	r.runningJobs[dbName] = true
+	r.runningMu.Unlock()
+
+	defer func() {
+		r.runningMu.Lock()
+		delete(r.runningJobs, dbName)
+		r.runningMu.Unlock()
+	}()
+
+	startTime := time.Now().UTC()
+	if logWriter != nil {
+		fmt.Fprintf(logWriter, "[%s] Starting restore for database %q from destination %q (%s)\n", startTime.Format(time.RFC3339), dbName, destName, backupPath)
+	}
+
 	reader, err := target.Open(ctx, backupPath)
 	if err != nil {
 		return fmt.Errorf("open backup file %s: %w", backupPath, err)
@@ -307,6 +418,9 @@ func (r *Runner) RestoreBackup(ctx context.Context, dbName, destName, backupPath
 
 	// If encrypted, decrypt on the fly
 	if destCfg.Encryption != nil && destCfg.Encryption.Enabled && destCfg.Encryption.Passphrase != "" {
+		if logWriter != nil {
+			fmt.Fprintf(logWriter, "[%s] Decrypting AES-256-GCM backup stream...\n", time.Now().UTC().Format(time.RFC3339))
+		}
 		pr, pw := io.Pipe()
 		go func() {
 			decErr := encryption.DecryptStream(destCfg.Encryption.Passphrase, reader, pw)
@@ -315,5 +429,22 @@ func (r *Runner) RestoreBackup(ctx context.Context, dbName, destName, backupPath
 		stream = pr
 	}
 
-	return driver.Restore(ctx, dbCfg, stream, logWriter)
+	if logWriter != nil {
+		fmt.Fprintf(logWriter, "[%s] Applying restore stream using %s driver...\n", time.Now().UTC().Format(time.RFC3339), dbCfg.Engine)
+	}
+
+	restoreErr := driver.Restore(ctx, dbCfg, stream, logWriter)
+	duration := time.Since(startTime)
+
+	if restoreErr != nil {
+		if logWriter != nil {
+			fmt.Fprintf(logWriter, "[%s] ERROR: Restore failed after %s: %v\n", time.Now().UTC().Format(time.RFC3339), duration.Round(time.Millisecond), restoreErr)
+		}
+		return restoreErr
+	}
+
+	if logWriter != nil {
+		fmt.Fprintf(logWriter, "[%s] Restore completed successfully in %s\n", time.Now().UTC().Format(time.RFC3339), duration.Round(time.Millisecond))
+	}
+	return nil
 }

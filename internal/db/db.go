@@ -183,7 +183,17 @@ func (s *Store) GetSummaryStats(ctx context.Context) (*SummaryStats, error) {
 		return nil, err
 	}
 	if lastBackup.Valid && lastBackup.String != "" {
-		for _, layout := range []string{time.RFC3339Nano, time.RFC3339, "2006-01-02 15:04:05.999999999-07:00", "2006-01-02 15:04:05-07:00", "2006-01-02 15:04:05"} {
+		layouts := []string{
+			time.RFC3339Nano,
+			time.RFC3339,
+			"2006-01-02 15:04:05.999999999 -0700 MST",
+			"2006-01-02 15:04:05.999999 -0700 MST",
+			"2006-01-02 15:04:05 -0700 MST",
+			"2006-01-02 15:04:05.999999999-07:00",
+			"2006-01-02 15:04:05-07:00",
+			"2006-01-02 15:04:05",
+		}
+		for _, layout := range layouts {
 			if t, err := time.Parse(layout, lastBackup.String); err == nil {
 				stats.LastBackupAt = &t
 				break

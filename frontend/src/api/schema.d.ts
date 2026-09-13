@@ -38,6 +38,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/databases/{id}/backups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List backup files in storage destinations for a database */
+        get: operations["list-database-backups"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/databases/{id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restore a database from a storage destination backup */
+        post: operations["restore-database-backup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/destinations": {
         parameters: {
             query?: never;
@@ -229,6 +263,43 @@ export interface components {
             /** Format: int64 */
             total: number;
         };
+        ListBackupsOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ListBackupsOutputBody.json
+             */
+            readonly $schema?: string;
+            backups: components["schemas"]["StorageBackupItem"][] | null;
+        };
+        RestoreBackupInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/RestoreBackupInputBody.json
+             */
+            readonly $schema?: string;
+            /** @description Path of backup file in destination */
+            backup_path: string;
+            /** @description Name of storage destination */
+            destination: string;
+        };
+        RestoreBackupOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/RestoreBackupOutputBody.json
+             */
+            readonly $schema?: string;
+            /**
+             * Format: int64
+             * @example 1250
+             */
+            duration_ms: number;
+            logs?: string;
+            /** @example Database dev_db restored successfully */
+            message: string;
+        };
         RetentionPolicy: {
             /** Format: int64 */
             daily: number;
@@ -301,6 +372,18 @@ export interface components {
              * @example 1.0.0
              */
             version: string;
+        };
+        StorageBackupItem: {
+            database: string;
+            destination: string;
+            destination_type: string;
+            encrypted: boolean;
+            filename: string;
+            /** Format: date-time */
+            mod_time: string;
+            path: string;
+            /** Format: int64 */
+            size_bytes: number;
         };
         SummaryStats: {
             /**
@@ -390,6 +473,77 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TriggerBackupOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-database-backups": {
+        parameters: {
+            query?: {
+                /** @description Optional filter by storage destination name */
+                destination?: string;
+            };
+            header?: never;
+            path: {
+                /** @description Name of the database */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListBackupsOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "restore-database-backup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Name of the database to restore */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RestoreBackupInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RestoreBackupOutputBody"];
                 };
             };
             /** @description Error */

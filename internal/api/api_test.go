@@ -91,4 +91,35 @@ func TestAPI(t *testing.T) {
 	if len(dbs) != 1 {
 		t.Errorf("expected 1 database, got %d", len(dbs))
 	}
+
+	// 4. Test GET /api/v1/databases/testdb/backups
+	reqBackups := httptest.NewRequest(http.MethodGet, "/api/v1/databases/testdb/backups", nil)
+	recBackups := httptest.NewRecorder()
+	r.ServeHTTP(recBackups, reqBackups)
+
+	if recBackups.Code != http.StatusOK {
+		t.Fatalf("expected 200 for backups, got %d: %s", recBackups.Code, recBackups.Body.String())
+	}
+	var backupsResp struct {
+		Backups []any `json:"backups"`
+	}
+	if err := json.Unmarshal(recBackups.Body.Bytes(), &backupsResp); err != nil {
+		t.Fatalf("failed to unmarshal backups response: %v", err)
+	}
+
+	// 5. Test 404 for nonexistent database
+	req404 := httptest.NewRequest(http.MethodGet, "/api/v1/databases/nonexistent/backups", nil)
+	rec404 := httptest.NewRecorder()
+	r.ServeHTTP(rec404, req404)
+	if rec404.Code != http.StatusNotFound {
+		t.Errorf("expected 404 for nonexistent db backups, got %d", rec404.Code)
+	}
+
+	// 6. Test 400 for restore without destination or path
+	reqRestoreBad := httptest.NewRequest(http.MethodPost, "/api/v1/databases/testdb/restore", nil)
+	recRestoreBad := httptest.NewRecorder()
+	r.ServeHTTP(recRestoreBad, reqRestoreBad)
+	if recRestoreBad.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for restore with missing body, got %d", recRestoreBad.Code)
+	}
 }

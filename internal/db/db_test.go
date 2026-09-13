@@ -55,4 +55,7 @@ func TestStore(t *testing.T) {
 	if stats.TotalBackups != 1 || stats.SuccessfulCount != 1 || stats.FailedCount != 0 {
 		t.Errorf("unexpected stats: %+v", stats)
 	}
+	if stats.LastBackupAt == nil {
+		t.Errorf("expected LastBackupAt to be non-nil, got nil")
+	}
 }

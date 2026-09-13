@@ -46,4 +46,4 @@ tasks:
     dir: "{{.ROOT_DIR}}"
     cmds:
       - go run ./cmd/arkbase export-openapi --out openapi.json
-      - bun --cwd frontend dlx openapi-typescript openapi.json -o ./frontend/src/api/schema.d.ts
+      - pnpm dlx openapi-typescript openapi.json -o ./frontend/src/api/schema.d.ts

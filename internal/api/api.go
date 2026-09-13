@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/http"
@@ -89,6 +90,33 @@ type TriggerBackupOutput struct {
 	Body struct {
 		Message string `json:"message" example:"Backup triggered"`
 		RunID   string `json:"run_id,omitempty"`
+	}
+}
+
+type ListBackupsInput struct {
+	ID          string `path:"id" doc:"Name of the database"`
+	Destination string `query:"destination" doc:"Optional filter by storage destination name"`
+}
+
+type ListBackupsOutput struct {
+	Body struct {
+		Backups []engine.StorageBackupItem `json:"backups"`
+	}
+}
+
+type RestoreBackupInput struct {
+	ID   string `path:"id" doc:"Name of the database to restore"`
+	Body struct {
+		Destination string `json:"destination" doc:"Name of storage destination"`
+		BackupPath  string `json:"backup_path" doc:"Path of backup file in destination"`
+	}
+}
+
+type RestoreBackupOutput struct {
+	Body struct {
+		Message    string `json:"message" example:"Database dev_db restored successfully"`
+		DurationMs int64  `json:"duration_ms" example:"1250"`
+		Logs       string `json:"logs,omitempty"`
 	}
 }
 
@@ -214,6 +242,57 @@ func (s *Server) registerRoutes(api huma.API) {
 
 		resp := &TriggerBackupOutput{}
 		resp.Body.Message = fmt.Sprintf("Backup started for database %s", input.ID)
+		return resp, nil
+	})
+
+	// GET /api/v1/databases/{id}/backups
+	huma.Register(api, huma.Operation{
+		OperationID: "list-database-backups",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/databases/{id}/backups",
+		Summary:     "List backup files in storage destinations for a database",
+		Tags:        []string{"Databases"},
+	}, func(ctx context.Context, input *ListBackupsInput) (*ListBackupsOutput, error) {
+		if _, ok := s.cfg.Databases[input.ID]; !ok {
+			return nil, huma.Error404NotFound(fmt.Sprintf("database %q not found", input.ID))
+		}
+		items, err := s.runner.ListDatabaseBackups(ctx, input.ID, input.Destination)
+		if err != nil {
+			return nil, huma.Error500InternalServerError("failed to list database backups", err)
+		}
+		resp := &ListBackupsOutput{}
+		resp.Body.Backups = items
+		return resp, nil
+	})
+
+	// POST /api/v1/databases/{id}/restore
+	huma.Register(api, huma.Operation{
+		OperationID: "restore-database-backup",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/databases/{id}/restore",
+		Summary:     "Restore a database from a storage destination backup",
+		Tags:        []string{"Databases"},
+	}, func(ctx context.Context, input *RestoreBackupInput) (*RestoreBackupOutput, error) {
+		if _, ok := s.cfg.Databases[input.ID]; !ok {
+			return nil, huma.Error404NotFound(fmt.Sprintf("database %q not found", input.ID))
+		}
+		if input.Body.Destination == "" || input.Body.BackupPath == "" {
+			return nil, huma.Error400BadRequest("destination and backup_path are required")
+		}
+
+		var logBuf bytes.Buffer
+		startTime := time.Now()
+		err := s.runner.RestoreBackup(ctx, input.ID, input.Body.Destination, input.Body.BackupPath, &logBuf)
+		durationMs := time.Since(startTime).Milliseconds()
+
+		if err != nil {
+			return nil, huma.Error500InternalServerError(fmt.Sprintf("restore failed: %v", err), fmt.Errorf("%s", logBuf.String()))
+		}
+
+		resp := &RestoreBackupOutput{}
+		resp.Body.Message = fmt.Sprintf("Database %s restored successfully", input.ID)
+		resp.Body.DurationMs = durationMs
+		resp.Body.Logs = logBuf.String()
 		return resp, nil
 	})
 
