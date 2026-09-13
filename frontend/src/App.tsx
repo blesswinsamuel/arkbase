@@ -21,6 +21,7 @@ import {
   RefreshCw,
   FolderLock
 } from 'lucide-react';
+import { ModeToggle } from './components/mode-toggle';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -139,6 +140,7 @@ function Dashboard() {
                 <ExternalLink className="h-3.5 w-3.5" />
               </Button>
             </a>
+            <ModeToggle />
           </div>
         </div>
       </header>
