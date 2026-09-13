@@ -1,0 +1,83 @@
+# arkbase configuration example
+# Environment variables like ${VAR} or ${VAR:-default} are expanded automatically.
+
+server:
+  port: 8080
+  data_dir: /var/lib/arkbase
+  auth:
+    enabled: false # Set to true to require HTTP Basic Auth
+    username: admin
+    password: "${ARKBASE_ADMIN_PASSWORD:-admin123}"
+
+destinations:
+  # 1. Local filesystem / mounted volume
+  local_storage:
+    type: filesystem
+    path: /backups/{{ .Database }}/{{ .Database }}_{{ .Timestamp }}.sql.gz
+    retention:
+      keep_last: 7 # Keep the 7 most recent backups
+      daily: 7     # Keep daily backups for 7 days
+      weekly: 4    # Keep weekly backups for 4 weeks
+      monthly: 3   # Keep monthly backups for 3 months
+
+  # 2. S3 or S3-compatible Object Storage (AWS, MinIO, Cloudflare R2, Wasabi, Backblaze B2)
+  offsite_s3:
+    type: s3
+    endpoint: s3.us-east-1.amazonaws.com # or r2.cloudflarestorage.com or minio:9000
+    bucket: company-backups
+    region: us-east-1
+    access_key: "${S3_ACCESS_KEY}"
+    secret_key: "${S3_SECRET_KEY}"
+    insecure: false
+    path: backups/{{ .Engine }}/{{ .Database }}/{{ .Database }}_{{ .Timestamp }}.sql.gz.enc
+    # Optional client-side AES-256-GCM encryption
+    encryption:
+      enabled: true
+      passphrase: "${BACKUP_ENCRYPTION_KEY}"
+    retention:
+      keep_last: 10
+      hourly: 24
+      daily: 14
+      weekly: 8
+      monthly: 12
+      yearly: 3
+
+databases:
+  # Standard PostgreSQL database
+  production_pg:
+    engine: postgres
+    host: pg-server.internal
+    port: 5432
+    username: postgres
+    password: "${PG_PASSWORD}"
+    database: my_app
+    schedule: "0 */6 * * *" # Cron expression: every 6 hours
+    destinations:
+      - local_storage
+      - offsite_s3
+
+  # Analytics database configured via connection URI
+  analytics_pg:
+    engine: postgres
+    uri: "postgres://user:${ANALYTICS_PASSWORD}@analytics-pg:5432/analytics?sslmode=disable"
+    schedule: "0 2 * * *" # Daily at 2:00 AM
+    destinations:
+      - offsite_s3
+
+# Webhook and chat alerting
+notifications:
+  - name: healthchecks_heartbeat
+    type: webhook
+    url: "https://hc-ping.com/${HEALTHCHECK_UUID}"
+    on_events: [success]
+
+  - name: devops_discord
+    type: discord
+    webhook_url: "${DISCORD_WEBHOOK_URL}"
+    on_events: [failure]
+
+  - name: alerts_telegram
+    type: telegram
+    bot_token: "${TELEGRAM_BOT_TOKEN}"
+    chat_id: "${TELEGRAM_CHAT_ID}"
+    on_events: [failure]

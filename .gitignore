@@ -1,0 +1,36 @@
+# Binaries
+/arkbase
+/bin/
+
+# Go build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# SQLite
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+/data/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.pnpm-store/
+.pnpm-debug.log*
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# IDE & OS
+.DS_Store
+.idea/
+.vscode/
+*.swp

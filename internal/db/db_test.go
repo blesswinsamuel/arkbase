@@ -1,0 +1,58 @@
+package db_test
+
+import (
+	"context"
+	"testing"
+	"time"
+
+	"github.com/blesswinsamuel/arkbase/internal/db"
+)
+
+func TestStore(t *testing.T) {
+	ctx := context.Background()
+	store, err := db.Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+	defer store.Close()
+
+	runID := "run-12345"
+	if err := store.RecordStart(ctx, runID, "testdb", "postgres"); err != nil {
+		t.Fatalf("failed to record start: %v", err)
+	}
+
+	run, err := store.GetRun(ctx, runID)
+	if err != nil {
+		t.Fatalf("failed to get run: %v", err)
+	}
+	if run.Status != "running" {
+		t.Errorf("expected running, got %s", run.Status)
+	}
+
+	dests := []string{"local", "s3"}
+	if err := store.RecordFinish(ctx, runID, "success", 1024*1024, 5*time.Second, dests, "", "backup completed"); err != nil {
+		t.Fatalf("failed to record finish: %v", err)
+	}
+
+	run, err = store.GetRun(ctx, runID)
+	if err != nil {
+		t.Fatalf("failed to get run after finish: %v", err)
+	}
+	if run.Status != "success" {
+		t.Errorf("expected success, got %s", run.Status)
+	}
+	if run.SizeBytes != 1024*1024 {
+		t.Errorf("expected 1MB, got %d", run.SizeBytes)
+	}
+	if len(run.Destinations) != 2 {
+		t.Errorf("expected 2 destinations, got %d", len(run.Destinations))
+	}
+
+	stats, err := store.GetSummaryStats(ctx)
+	if err != nil {
+		t.Fatalf("failed to get summary stats: %v", err)
+	}
+	if stats.TotalBackups != 1 || stats.SuccessfulCount != 1 || stats.FailedCount != 0 {
+		t.Errorf("unexpected stats: %+v", stats)
+	}
+}
