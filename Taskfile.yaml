@@ -1,0 +1,49 @@
+version: 3
+
+vars:
+  WEB_PORT: "18081"
+  CONFIG_DEV: "config.dev.yaml"
+
+tasks:
+  dev:api:
+    desc: "Start arkbase Go daemon with config.dev.yaml"
+    dir: "{{.ROOT_DIR}}"
+    cmd: go run ./cmd/arkbase run --config {{.CONFIG_DEV}}
+
+  dev:web:
+    desc: "Start Vite React frontend dev server on 0.0.0.0:{{.WEB_PORT}}"
+    dir: "{{.ROOT_DIR}}/frontend"
+    cmd: bun dev --host 0.0.0.0 --port {{.WEB_PORT}}
+
+  dev:postgres:
+    desc: "Start native PostgreSQL 17 cluster via Nix and auto-seed"
+    dir: "{{.ROOT_DIR}}"
+    cmd: nix shell nixpkgs#postgresql --command ./scripts/dev-postgres.sh
+
+  build:fe:
+    desc: "Build frontend production assets"
+    dir: "{{.ROOT_DIR}}/frontend"
+    cmd: bun run build
+
+  build:be:
+    desc: "Build arkbase single static binary"
+    dir: "{{.ROOT_DIR}}"
+    cmd: go build -o arkbase ./cmd/arkbase
+
+  build:
+    desc: "Build both frontend and backend binary"
+    cmds:
+      - task: build:fe
+      - task: build:be
+
+  test:
+    desc: "Run unit and integration tests"
+    dir: "{{.ROOT_DIR}}"
+    cmd: go test -v ./internal/...
+
+  gen:types:
+    desc: "Re-export OpenAPI schema and regenerate TypeScript client types"
+    dir: "{{.ROOT_DIR}}"
+    cmds:
+      - go run ./cmd/arkbase export-openapi --out openapi.json
+      - bun --cwd frontend dlx openapi-typescript openapi.json -o ./frontend/src/api/schema.d.ts
