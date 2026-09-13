@@ -1,0 +1,36 @@
+version: "1"
+name: arkbase
+
+services:
+  # Ephemeral PostgreSQL 17 test database pre-seeded with testdata/seed.sql
+  postgres:
+    command: >-
+      docker run --rm --name arkbase-dev-pg
+      -p 5432:5432
+      -e POSTGRES_USER=postgres
+      -e POSTGRES_PASSWORD=postgres
+      -e POSTGRES_DB=dev_db
+      -v ./testdata/seed.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      postgres:17-alpine
+    healthcheck:
+      test: ["CMD", "docker", "exec", "arkbase-dev-pg", "pg_isready", "-U", "postgres", "-d", "dev_db"]
+      interval: 2s
+      retries: 15
+      timeout: 2s
+
+  # Go API & Scheduler daemon
+  api:
+    command: go run ./cmd/arkbase run --config config.dev.yaml
+    depends_on:
+      postgres: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/status"]
+      interval: 2s
+      retries: 10
+      timeout: 2s
+
+  # React Frontend dev server with HMR (proxied to API on port 8080)
+  web:
+    command: bun run --cwd frontend dev --port 3000
+    depends_on:
+      api: { condition: service_healthy }

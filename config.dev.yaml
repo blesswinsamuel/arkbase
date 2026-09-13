@@ -1,0 +1,38 @@
+# arkbase local development configuration
+
+server:
+  port: 8080
+  data_dir: ./data
+  auth:
+    enabled: false # Disabled for local dev; protected by network or set to true for basic auth
+
+destinations:
+  local_storage:
+    type: filesystem
+    path: ./backups/{{ .Database }}/{{ .Database }}_{{ .Timestamp }}.sql.gz
+    retention:
+      keep_last: 5
+      daily: 7
+
+  local_encrypted:
+    type: filesystem
+    path: ./backups/{{ .Database }}/{{ .Database }}_{{ .Timestamp }}.sql.gz.enc
+    encryption:
+      enabled: true
+      passphrase: "dev-master-encryption-key"
+    retention:
+      keep_last: 5
+
+databases:
+  dev_db:
+    engine: postgres
+    host: localhost
+    port: 5432
+    username: postgres
+    password: postgres
+    database: dev_db
+    sslmode: disable
+    schedule: "*/5 * * * *" # Run backup every 5 minutes
+    destinations:
+      - local_storage
+      - local_encrypted

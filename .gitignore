@@ -17,6 +17,7 @@
 *.db-wal
 *.db-shm
 /data/
+/backups/
 
 # Frontend
 frontend/node_modules/

@@ -49,7 +49,20 @@
 
 ## 🚀 Quickstart
 
-### 1. Create a `config.yaml`
+### 1. Instant Local Sandbox with `local-compose`
+
+If you use [local-compose](https://github.com/blesswinsamuel/local-compose), you can start an ephemeral PostgreSQL 17 test database (pre-seeded with sample data), the Go API backend, and the React frontend with one command:
+
+```bash
+local-compose up
+```
+
+- **Dashboard with HMR**: `http://localhost:3000`
+- **API & Interactive Docs**: `http://localhost:8080/docs`
+
+---
+
+### 2. Standalone Deployment with `config.yaml`
 
 ```yaml
 server:
