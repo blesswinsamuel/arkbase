@@ -58,7 +58,7 @@ local-compose up -d
 ```
 This automatically:
 - Starts a native PostgreSQL 17 instance via Nix (storing data in `./data/postgres`) and auto-seeds it with sample tables and records (`testdata/seed.sql`).
-- Starts the `arkbase` Go daemon via `task dev:api` (`go run ./cmd/arkbase run --config config.dev.yaml`).
+- Starts the `arkbase` Go daemon via `task dev:api` (auto-reloading on changes with `gow`).
 - Launches the Vite React frontend on `http://localhost:18081` (`0.0.0.0:18081`) via `task dev:web` with live HMR using Bun.
 
 ---

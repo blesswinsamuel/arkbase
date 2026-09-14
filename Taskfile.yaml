@@ -6,9 +6,16 @@ vars:
 
 tasks:
   dev:api:
-    desc: "Start arkbase Go daemon with config.dev.yaml"
+    desc: "Start arkbase Go daemon with config.dev.yaml (auto-restarts on changes via gow)"
     dir: "{{.ROOT_DIR}}"
-    cmd: go run ./cmd/arkbase run --config {{.CONFIG_DEV}}
+    cmds:
+      - |
+        if command -v gow >/dev/null 2>&1; then
+          gow -v -e=go,mod,yaml -i=.git -i=data -i=backups -i=frontend run ./cmd/arkbase run --config {{.CONFIG_DEV}}
+        else
+          echo "Tip: Install 'gow' for auto-reloading backend changes (go install github.com/mitranim/gow@latest)"
+          go run ./cmd/arkbase run --config {{.CONFIG_DEV}}
+        fi
 
   dev:web:
     desc: "Start Vite React frontend dev server on 0.0.0.0:{{.WEB_PORT}}"
