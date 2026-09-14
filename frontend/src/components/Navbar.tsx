@@ -85,12 +85,8 @@ export function Navbar() {
           </nav>
         </div>
 
-        {/* Right: Status & Actions */}
+        {/* Right: Actions */}
         <div className="flex items-center gap-2">
-          <Badge variant="secondary" className="flex items-center gap-1.5 py-1 px-2.5">
-            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span>Daemon Online</span>
-          </Badge>
           <a href="/docs" target="_blank" rel="noreferrer">
             <Button variant="outline" size="sm" className="flex items-center gap-1.5 cursor-pointer">
               <span>API Docs</span>
