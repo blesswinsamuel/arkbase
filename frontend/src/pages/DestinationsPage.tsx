@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { client, type DestinationInfo } from '@/api/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
 import { HardDrive, ShieldCheck, Layers } from 'lucide-react';
 
 export function DestinationsPage() {
@@ -52,11 +53,13 @@ export function DestinationsPage() {
                 </div>
 
                 {dest.retention && (
-                  <div className="border-t pt-3 mt-3">
-                    <div className="font-medium text-muted-foreground mb-1.5 flex items-center gap-1.5">
-                      <Layers className="h-3.5 w-3.5" />
-                      <span>Grandfather-Father-Son (GFS) Retention</span>
-                    </div>
+                  <>
+                    <Separator className="my-3" />
+                    <div>
+                      <div className="font-medium text-muted-foreground mb-1.5 flex items-center gap-1.5">
+                        <Layers className="h-3.5 w-3.5" />
+                        <span>Grandfather-Father-Son (GFS) Retention</span>
+                      </div>
                     <div className="grid grid-cols-3 gap-2 font-mono text-[11px] text-muted-foreground">
                       {dest.retention.keep_last > 0 && <div>Keep Last: {dest.retention.keep_last}</div>}
                       {dest.retention.hourly > 0 && <div>Hourly: {dest.retention.hourly}h</div>}
@@ -66,6 +69,7 @@ export function DestinationsPage() {
                       {dest.retention.yearly > 0 && <div>Yearly: {dest.retention.yearly}y</div>}
                     </div>
                   </div>
+                  </>
                 )}
               </CardContent>
             </Card>

@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Terminal, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { formatBytes, formatDate, formatTimeAgo } from '@/lib/formatters';
 
@@ -176,16 +177,18 @@ export function HistoryPage() {
               Run ID: <span className="font-mono">{selectedRun?.id}</span> • Started: {selectedRun?.started_at ? formatDate(selectedRun.started_at) : ''}
             </DialogDescription>
           </DialogHeader>
-          <div className="flex-1 overflow-auto bg-zinc-950 text-zinc-100 p-4 rounded-md font-mono text-xs whitespace-pre-wrap leading-relaxed border border-zinc-800 min-h-[200px]">
+          <ScrollArea className="flex-1 max-h-[60vh] bg-zinc-950 p-4 rounded-md font-mono text-xs whitespace-pre-wrap leading-relaxed border border-zinc-800 min-h-[200px]">
             {loadingLogs ? (
               <div className="flex items-center justify-center py-12 text-zinc-400 gap-2">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 <span>Loading execution logs...</span>
               </div>
             ) : (
-              logsData || 'No log output captured.'
+              <div className="text-zinc-100 font-mono text-xs whitespace-pre-wrap leading-relaxed">
+                {logsData || 'No log output captured.'}
+              </div>
             )}
-          </div>
+          </ScrollArea>
         </DialogContent>
       </Dialog>
     </div>

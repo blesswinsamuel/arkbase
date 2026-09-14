@@ -4,6 +4,9 @@ import { client, type StorageBackupItem, type RestoreBackupResponse } from '@/ap
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Separator } from '@/components/ui/separator';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { AlertTriangle, CheckCircle2, XCircle, RotateCcw, Terminal, RefreshCw, ShieldCheck } from 'lucide-react';
 import { formatBytes, formatDate } from '@/lib/formatters';
 
@@ -78,7 +81,7 @@ export function RestoreDialog({ open, onOpenChange, databaseName, backup, onSucc
         {/* Content View */}
         <div className="space-y-4 py-2 flex-1 overflow-y-auto">
           {/* Metadata Card */}
-          <div className="bg-muted/40 p-3.5 rounded-lg border text-xs space-y-2">
+          <div className="bg-muted/40 p-3.5 rounded-lg border text-xs space-y-2.5">
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <span className="text-muted-foreground">Target Database:</span>
@@ -93,7 +96,9 @@ export function RestoreDialog({ open, onOpenChange, databaseName, backup, onSucc
               </div>
             </div>
 
-            <div className="border-t pt-2 grid grid-cols-2 gap-2">
+            <Separator />
+
+            <div className="grid grid-cols-2 gap-2">
               <div>
                 <span className="text-muted-foreground">File Size:</span>
                 <div className="font-mono font-medium text-foreground">{formatBytes(backup.size_bytes)}</div>
@@ -104,7 +109,9 @@ export function RestoreDialog({ open, onOpenChange, databaseName, backup, onSucc
               </div>
             </div>
 
-            <div className="border-t pt-2">
+            <Separator />
+
+            <div>
               <span className="text-muted-foreground">Source Path:</span>
               <div className="font-mono text-[11px] text-muted-foreground break-all mt-0.5 bg-background p-1.5 rounded border">
                 {backup.path}
@@ -122,15 +129,16 @@ export function RestoreDialog({ open, onOpenChange, databaseName, backup, onSucc
           {/* Result view if finished */}
           {restoreResult && (
             <div className="space-y-3">
-              <div className="flex items-center gap-2 p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-lg text-xs font-medium">
-                <CheckCircle2 className="h-4 w-4 shrink-0" />
-                <div className="flex-1">
+              <Alert className="border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                <AlertTitle>Restore Succeeded</AlertTitle>
+                <AlertDescription className="text-emerald-700 dark:text-emerald-300 flex items-center justify-between">
                   <span>{restoreResult.message}</span>
-                  <span className="ml-2 font-mono text-[11px] text-muted-foreground">
+                  <span className="font-mono text-[11px] opacity-80">
                     ({restoreResult.duration_ms} ms)
                   </span>
-                </div>
-              </div>
+                </AlertDescription>
+              </Alert>
 
               {restoreResult.logs && (
                 <div className="space-y-1">
@@ -138,9 +146,11 @@ export function RestoreDialog({ open, onOpenChange, databaseName, backup, onSucc
                     <Terminal className="h-3.5 w-3.5" />
                     <span>Restore Execution Output</span>
                   </div>
-                  <pre className="p-3 bg-zinc-950 text-zinc-100 rounded-md font-mono text-[11px] max-h-48 overflow-auto border border-zinc-800 whitespace-pre-wrap leading-relaxed">
-                    {restoreResult.logs}
-                  </pre>
+                  <ScrollArea className="h-48 rounded-md border border-zinc-800 bg-zinc-950 p-3">
+                    <pre className="font-mono text-[11px] text-zinc-100 whitespace-pre-wrap leading-relaxed">
+                      {restoreResult.logs}
+                    </pre>
+                  </ScrollArea>
                 </div>
               )}
             </div>
@@ -148,25 +158,25 @@ export function RestoreDialog({ open, onOpenChange, databaseName, backup, onSucc
 
           {/* Error view */}
           {errorMessage && (
-            <div className="flex items-start gap-2 p-3 bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 rounded-lg text-xs">
-              <XCircle className="h-4 w-4 shrink-0 mt-0.5" />
-              <div className="space-y-1">
-                <div className="font-semibold">Restore Operation Failed</div>
-                <div className="text-muted-foreground font-mono text-[11px] whitespace-pre-wrap">{errorMessage}</div>
-              </div>
-            </div>
+            <Alert variant="destructive">
+              <XCircle className="h-4 w-4" />
+              <AlertTitle>Restore Operation Failed</AlertTitle>
+              <AlertDescription className="font-mono text-[11px] whitespace-pre-wrap">
+                {errorMessage}
+              </AlertDescription>
+            </Alert>
           )}
 
           {/* Caution Alert prior to restoring */}
           {!restoreResult && (
-            <div className="flex items-start gap-2.5 p-3.5 bg-amber-500/10 border border-amber-500/25 rounded-lg text-xs text-amber-700 dark:text-amber-300">
-              <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500 mt-0.5" />
-              <div>
-                <span className="font-semibold">Caution: </span>
+            <Alert className="border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300">
+              <AlertTriangle className="h-4 w-4 text-amber-500" />
+              <AlertTitle>Caution</AlertTitle>
+              <AlertDescription>
                 Restoring will clean, drop, and overwrite existing schema and data in database{' '}
                 <strong className="font-semibold underline">{databaseName}</strong>. Make sure you want to revert to this snapshot before continuing.
-              </div>
-            </div>
+              </AlertDescription>
+            </Alert>
           )}
         </div>
 

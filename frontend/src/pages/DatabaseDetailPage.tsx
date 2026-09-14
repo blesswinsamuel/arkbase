@@ -8,6 +8,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { 
   Database, 
   HardDrive, 
@@ -386,16 +388,24 @@ export function DatabaseDetailPage() {
                   {dbInfo?.destinations && dbInfo.destinations.length > 1 && (
                     <div className="flex items-center gap-1.5 text-xs">
                       <Filter className="h-3.5 w-3.5 text-muted-foreground" />
-                      <select
+                      <Select
                         value={destinationFilter}
-                        onChange={(e) => setDestinationFilter(e.target.value)}
-                        className="bg-background border rounded-md px-2 py-1 text-xs"
+                        onValueChange={(val) => {
+                          if (val) setDestinationFilter(val);
+                        }}
                       >
-                        <option value="all">All Destinations</option>
-                        {dbInfo.destinations.map(d => (
-                          <option key={d} value={d}>{d}</option>
-                        ))}
-                      </select>
+                        <SelectTrigger className="w-[160px] h-8 text-xs">
+                          <SelectValue placeholder="All Destinations" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Destinations</SelectItem>
+                          {dbInfo.destinations.map((d) => (
+                            <SelectItem key={d} value={d}>
+                              {d}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   )}
 
@@ -507,16 +517,18 @@ export function DatabaseDetailPage() {
               Run ID: <span className="font-mono">{selectedRun?.id}</span> • Started: {selectedRun?.started_at ? formatDate(selectedRun.started_at) : ''}
             </DialogDescription>
           </DialogHeader>
-          <div className="flex-1 overflow-auto bg-zinc-950 text-zinc-100 p-4 rounded-md font-mono text-xs whitespace-pre-wrap leading-relaxed border border-zinc-800 min-h-[200px]">
+          <ScrollArea className="flex-1 max-h-[60vh] bg-zinc-950 p-4 rounded-md font-mono text-xs whitespace-pre-wrap leading-relaxed border border-zinc-800 min-h-[200px]">
             {loadingLogs ? (
               <div className="flex items-center justify-center py-12 text-zinc-400 gap-2">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 <span>Loading execution logs...</span>
               </div>
             ) : (
-              logsData || 'No log output captured.'
+              <div className="text-zinc-100 font-mono text-xs whitespace-pre-wrap leading-relaxed">
+                {logsData || 'No log output captured.'}
+              </div>
             )}
-          </div>
+          </ScrollArea>
         </DialogContent>
       </Dialog>
 

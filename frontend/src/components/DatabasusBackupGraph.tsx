@@ -3,6 +3,8 @@ import type { RunDetail } from '@/api/client';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Separator } from '@/components/ui/separator';
 import { CheckCircle2, XCircle, Clock, Activity, Zap, RefreshCw, Terminal } from 'lucide-react';
 import { formatBytes, formatDate, formatTimeAgo } from '@/lib/formatters';
 
@@ -40,22 +42,18 @@ export function DatabasusBackupGraph({ runs, onSelectRun }: Props) {
           </div>
 
           <div className="flex items-center gap-2">
-            <div className="flex items-center bg-muted/60 p-0.5 rounded-md border text-xs">
-              {(['30', '50', 'all'] as const).map(p => (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => setFilterPeriod(p)}
-                  className={`px-2.5 py-1 rounded-[4px] font-medium transition-colors cursor-pointer ${
-                    filterPeriod === p
-                      ? 'bg-background text-foreground shadow-xs font-semibold'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  {p === 'all' ? 'All' : `Last ${p}`}
-                </button>
-              ))}
-            </div>
+            <Tabs
+              value={filterPeriod}
+              onValueChange={(val) => {
+                if (val) setFilterPeriod(val as '30' | '50' | 'all');
+              }}
+            >
+              <TabsList className="h-7">
+                <TabsTrigger value="30" className="text-xs px-2.5 py-0.5">Last 30</TabsTrigger>
+                <TabsTrigger value="50" className="text-xs px-2.5 py-0.5">Last 50</TabsTrigger>
+                <TabsTrigger value="all" className="text-xs px-2.5 py-0.5">All</TabsTrigger>
+              </TabsList>
+            </Tabs>
           </div>
         </div>
       </CardHeader>
@@ -187,8 +185,10 @@ export function DatabasusBackupGraph({ runs, onSelectRun }: Props) {
           </div>
         </TooltipProvider>
 
+        <Separator />
+
         {/* Legend */}
-        <div className="flex items-center justify-between text-[11px] text-muted-foreground border-t pt-2">
+        <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-1.5">
               <span className="h-2.5 w-2.5 rounded-[2px] bg-emerald-500" />
