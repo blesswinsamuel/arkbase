@@ -15,6 +15,7 @@
   <a href="#-configuration-reference">Configuration</a> •
   <a href="#-web-dashboard--api-docs">Dashboard & API</a> •
   <a href="#-kubernetes-deployment">Kubernetes</a> •
+  <a href="#-local-development">Development</a> •
   <a href="#-license">License</a>
 </p>
 
@@ -49,23 +50,7 @@
 
 ## 🚀 Quickstart
 
-### Instant Local Dev (Zero-Docker with `local-compose`, Nix & Bun)
-
-If you have [`local-compose`](https://github.com/blesswinsamuel/local-compose), [Nix](https://nixos.org/), and [Bun](https://bun.sh/) installed, clone and run:
-
-```bash
-local-compose up -d
-```
-This automatically:
-- Starts a native PostgreSQL 17 instance via Nix (storing data in `./data/postgres`) and auto-seeds it with sample tables and records (`testdata/seed.sql`).
-- Starts the `arkbase` Go daemon via `task dev:api` (auto-reloading on changes with `gow`).
-- Launches the Vite React frontend on `http://localhost:18081` (`0.0.0.0:18081`) via `task dev:web` with live HMR using Bun.
-
----
-
-### Run with Docker or Docker Compose
-
-#### 1. Create a `config.yaml`
+### 1. Create a `config.yaml`
 
 ```yaml
 server:
@@ -107,7 +92,7 @@ Open **`http://localhost:8080`** in your browser to access the dashboard!
 
 ---
 
-### 3. Run with Docker Compose
+### Alternative: Run with Docker Compose
 
 ```yaml
 services:
@@ -312,6 +297,26 @@ spec:
 
 ---
 
+## 💻 Local Development
+
+If you want to contribute or develop `arkbase` locally:
+
+**Prerequisites**: [`local-compose`](https://github.com/blesswinsamuel/local-compose), [Nix](https://nixos.org/), and [Bun](https://bun.sh/).
+
+```bash
+git clone https://github.com/blesswinsamuel/arkbase.git
+cd arkbase
+local-compose up -d
+```
+
+This automatically:
+- Starts a native PostgreSQL 17 instance via Nix (storing data in `./data/postgres`) and auto-seeds it with sample tables and records (`testdata/seed.sql`).
+- Starts the `arkbase` Go daemon via `task dev:api` (auto-reloading on changes with `gow`).
+- Launches the Vite React frontend on `http://localhost:18081` (`0.0.0.0:18081`) via `task dev:web` with live HMR using Bun.
+
+---
+
 ## 📄 License
 
 Licensed under the [Apache License, Version 2.0](LICENSE).
+
