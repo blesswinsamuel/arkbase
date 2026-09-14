@@ -3,6 +3,7 @@
 server:
   port: 8080
   data_dir: ./data/arkbase
+  history_retention_days: 90
   auth:
     enabled: false
 

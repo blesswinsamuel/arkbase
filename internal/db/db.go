@@ -3,14 +3,19 @@ package db
 import (
 	"context"
 	"database/sql"
+	"embed"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
+	"github.com/pressly/goose/v3"
 	_ "modernc.org/sqlite"
 )
+
+//go:embed migrations/*.sql
+var embedMigrations embed.FS
 
 type Store struct {
 	db *sql.DB
@@ -52,26 +57,13 @@ func Open(dataDir string) (*Store, error) {
 
 	db.SetMaxOpenConns(1) // SQLite is best with 1 writer
 
-	schema := `
-	CREATE TABLE IF NOT EXISTS backup_runs (
-		id TEXT PRIMARY KEY,
-		database_name TEXT NOT NULL,
-		engine TEXT NOT NULL,
-		status TEXT NOT NULL,
-		started_at DATETIME NOT NULL,
-		completed_at DATETIME,
-		duration_ms INTEGER DEFAULT 0,
-		size_bytes INTEGER DEFAULT 0,
-		destinations TEXT DEFAULT '[]',
-		error_message TEXT DEFAULT '',
-		logs TEXT DEFAULT ''
-	);
-	CREATE INDEX IF NOT EXISTS idx_backup_runs_db ON backup_runs(database_name);
-	CREATE INDEX IF NOT EXISTS idx_backup_runs_started ON backup_runs(started_at DESC);
-	CREATE INDEX IF NOT EXISTS idx_backup_runs_status ON backup_runs(status);
-	`
-	if _, err := db.Exec(schema); err != nil {
-		return nil, fmt.Errorf("migrate sqlite schema: %w", err)
+	goose.SetBaseFS(embedMigrations)
+	goose.SetLogger(goose.NopLogger())
+	if err := goose.SetDialect("sqlite3"); err != nil {
+		return nil, fmt.Errorf("set goose dialect: %w", err)
+	}
+	if err := goose.UpContext(context.Background(), db, "migrations"); err != nil {
+		return nil, fmt.Errorf("run sqlite migrations: %w", err)
 	}
 
 	return &Store{db: db}, nil
@@ -110,12 +102,12 @@ func (s *Store) GetRecentRuns(ctx context.Context, limit, offset int, dbFilter s
 
 	if dbFilter != "" {
 		countQuery = `SELECT COUNT(*) FROM backup_runs WHERE database_name = ?`
-		query = `SELECT id, database_name, engine, status, started_at, completed_at, duration_ms, size_bytes, destinations, error_message, logs FROM backup_runs WHERE database_name = ? ORDER BY started_at DESC LIMIT ? OFFSET ?`
+		query = `SELECT id, database_name, engine, status, started_at, completed_at, duration_ms, size_bytes, destinations, error_message FROM backup_runs WHERE database_name = ? ORDER BY started_at DESC LIMIT ? OFFSET ?`
 		countArgs = append(countArgs, dbFilter)
 		args = append(args, dbFilter, limit, offset)
 	} else {
 		countQuery = `SELECT COUNT(*) FROM backup_runs`
-		query = `SELECT id, database_name, engine, status, started_at, completed_at, duration_ms, size_bytes, destinations, error_message, logs FROM backup_runs ORDER BY started_at DESC LIMIT ? OFFSET ?`
+		query = `SELECT id, database_name, engine, status, started_at, completed_at, duration_ms, size_bytes, destinations, error_message FROM backup_runs ORDER BY started_at DESC LIMIT ? OFFSET ?`
 		args = append(args, limit, offset)
 	}
 
@@ -136,7 +128,7 @@ func (s *Store) GetRecentRuns(ctx context.Context, limit, offset int, dbFilter s
 		var destsStr string
 		var completedAt sql.NullTime
 
-		if err := rows.Scan(&r.ID, &r.DatabaseName, &r.Engine, &r.Status, &r.StartedAt, &completedAt, &r.DurationMs, &r.SizeBytes, &destsStr, &r.ErrorMessage, &r.Logs); err != nil {
+		if err := rows.Scan(&r.ID, &r.DatabaseName, &r.Engine, &r.Status, &r.StartedAt, &completedAt, &r.DurationMs, &r.SizeBytes, &destsStr, &r.ErrorMessage); err != nil {
 			return nil, 0, err
 		}
 		if completedAt.Valid {
@@ -164,6 +156,23 @@ func (s *Store) GetRun(ctx context.Context, id string) (*Run, error) {
 	}
 	_ = json.Unmarshal([]byte(destsStr), &r.Destinations)
 	return &r, nil
+}
+
+func (s *Store) GetRunLogs(ctx context.Context, id string) (string, error) {
+	var logs string
+	err := s.db.QueryRowContext(ctx, `SELECT logs FROM backup_runs WHERE id = ?`, id).Scan(&logs)
+	if err != nil {
+		return "", err
+	}
+	return logs, nil
+}
+
+func (s *Store) PruneRuns(ctx context.Context, cutoff time.Time) (int64, error) {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM backup_runs WHERE started_at < ?`, cutoff)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
 }
 
 func (s *Store) GetSummaryStats(ctx context.Context) (*SummaryStats, error) {

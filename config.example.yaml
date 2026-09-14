@@ -4,6 +4,7 @@
 server:
   port: 8080
   data_dir: /var/lib/arkbase
+  history_retention_days: 90 # Number of days to retain backup run history (default: 90)
   auth:
     enabled: false # Set to true to require HTTP Basic Auth
     username: admin

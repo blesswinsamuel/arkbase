@@ -58,6 +58,30 @@ func NewScheduler(cfg *config.Config, runner *Runner) (*Scheduler, error) {
 		log.Info().Str("database", name).Str("schedule", dbCfg.Schedule).Msg("registered backup schedule")
 	}
 
+	if cfg.Server.HistoryRetentionDays > 0 {
+		// Run initial prune on startup
+		go func() {
+			_, _ = runner.PruneHistory(context.Background())
+		}()
+
+		// Schedule daily prune at midnight
+		_, err := s.NewJob(
+			gocron.CronJob("0 0 * * *", false),
+			gocron.NewTask(func() {
+				log.Info().Msg("daily history retention cleanup triggered")
+				if _, err := runner.PruneHistory(context.Background()); err != nil {
+					log.Error().Err(err).Msg("history retention cleanup failed")
+				}
+			}),
+			gocron.WithName("__history_retention__"),
+		)
+		if err != nil {
+			log.Error().Err(err).Msg("failed to register history retention cron job")
+		} else {
+			log.Info().Int("retention_days", cfg.Server.HistoryRetentionDays).Msg("registered daily history retention cleanup job")
+		}
+	}
+
 	return sched, nil
 }
 

@@ -123,6 +123,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/history/{id}/logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get run execution output logs */
+        get: operations["get-run-logs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/stats": {
         parameters: {
             query?: never;
@@ -336,6 +353,18 @@ export interface components {
             /** Format: date-time */
             started_at: string;
             status: string;
+        };
+        RunLogsOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/RunLogsOutputBody.json
+             */
+            readonly $schema?: string;
+            /** @example run-123 */
+            id: string;
+            /** @example [2026-09-14T00:00:00Z] Backup started... */
+            logs: string;
         };
         StatusOutputBody: {
             /**
@@ -641,6 +670,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Run"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-run-logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Run UUID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunLogsOutputBody"];
                 };
             };
             /** @description Error */

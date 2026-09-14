@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { client, type DatabaseInfo, type RunDetail, type StorageBackupItem } from '@/api/client';
+import { client, type DatabaseInfo, type HistoryRun, type StorageBackupItem } from '@/api/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -20,7 +20,10 @@ import {
   RefreshCw,
   RotateCcw,
   ArrowLeft,
-  Filter
+  Filter,
+  ChevronLeft,
+  ChevronRight,
+  Loader2
 } from 'lucide-react';
 import { DatabasusBackupGraph } from '@/components/DatabasusBackupGraph';
 import { RestoreDialog } from '@/components/RestoreDialog';
@@ -36,9 +39,11 @@ export function DatabaseDetailPage() {
     setSearchParams({ tab });
   };
 
-  const [selectedRun, setSelectedRun] = useState<RunDetail | null>(null);
+  const [selectedRun, setSelectedRun] = useState<HistoryRun | null>(null);
   const [selectedBackupForRestore, setSelectedBackupForRestore] = useState<StorageBackupItem | null>(null);
   const [destinationFilter, setDestinationFilter] = useState<string>('all');
+  const [historyPage, setHistoryPage] = useState(1);
+  const historyPageSize = 20;
 
   // Fetch databases to find the current database configuration
   const { data: databases } = useQuery({
@@ -52,16 +57,36 @@ export function DatabaseDetailPage() {
   const dbInfo = databases?.find((d: DatabaseInfo) => d.name === id);
 
   // Fetch runs specifically for this database
-  const { data: runs = [], isLoading: loadingRuns } = useQuery({
-    queryKey: ['history', id],
+  const { data: historyData, isLoading: loadingRuns } = useQuery({
+    queryKey: ['history', id, historyPage, historyPageSize],
     queryFn: async () => {
-      if (!id) return [];
+      if (!id) return { runs: [], total: 0 };
       const res = await client.GET('/api/v1/history', { 
-        params: { query: { database: id, limit: 100 } } 
+        params: { query: { database: id, limit: historyPageSize, offset: (historyPage - 1) * historyPageSize } } 
       });
-      return res.data?.runs || [];
+      return {
+        runs: res.data?.runs || [],
+        total: res.data?.total || 0,
+      };
     },
     enabled: !!id,
+  });
+
+  const runs = historyData?.runs || [];
+  const totalRuns = historyData?.total || 0;
+  const totalHistoryPages = Math.max(1, Math.ceil(totalRuns / historyPageSize));
+
+  // Query logs on demand when a run is selected
+  const { data: logsData, isLoading: loadingLogs } = useQuery({
+    queryKey: ['run-logs', selectedRun?.id],
+    queryFn: async () => {
+      if (!selectedRun?.id) return null;
+      const res = await client.GET('/api/v1/history/{id}/logs', {
+        params: { path: { id: selectedRun.id } },
+      });
+      return res.data?.logs || '';
+    },
+    enabled: !!selectedRun?.id,
   });
 
   // Fetch storage destination backups for this database
@@ -240,68 +265,106 @@ export function DatabaseDetailPage() {
                   No backup runs recorded for this database yet.
                 </div>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Started</TableHead>
-                      <TableHead>Duration</TableHead>
-                      <TableHead>Size</TableHead>
-                      <TableHead>Destinations</TableHead>
-                      <TableHead className="text-right">Action</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {runs.map((run: RunDetail) => (
-                      <TableRow key={run.id}>
-                        <TableCell>
-                          {run.status === 'success' ? (
-                            <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 flex w-fit items-center gap-1">
-                              <CheckCircle2 className="h-3 w-3" />
-                              <span>Success</span>
-                            </Badge>
-                          ) : run.status === 'running' ? (
-                            <Badge variant="secondary" className="animate-pulse flex w-fit items-center gap-1">
-                              <RefreshCw className="h-3 w-3 animate-spin" />
-                              <span>Running</span>
-                            </Badge>
-                          ) : (
-                            <Badge variant="destructive" className="flex w-fit items-center gap-1">
-                              <XCircle className="h-3 w-3" />
-                              <span>Failed</span>
-                            </Badge>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-xs">
-                          <div>{formatDate(run.started_at)}</div>
-                          <div className="text-muted-foreground text-[11px]">{formatTimeAgo(run.started_at)}</div>
-                        </TableCell>
-                        <TableCell className="text-xs font-mono">{run.duration_ms} ms</TableCell>
-                        <TableCell className="text-xs font-mono">{formatBytes(run.size_bytes)}</TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap gap-1">
-                            {run.destinations?.map((dst: string) => (
-                              <Badge key={dst} variant="outline" className="text-[10px]">
-                                {dst}
-                              </Badge>
-                            ))}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setSelectedRun(run)}
-                            className="h-8 px-2"
-                          >
-                            <Terminal className="h-4 w-4 mr-1 text-muted-foreground" />
-                            <span className="text-xs">Logs</span>
-                          </Button>
-                        </TableCell>
+                <>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Started</TableHead>
+                        <TableHead>Duration</TableHead>
+                        <TableHead>Size</TableHead>
+                        <TableHead>Destinations</TableHead>
+                        <TableHead className="text-right">Action</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {runs.map((run: HistoryRun) => (
+                        <TableRow key={run.id}>
+                          <TableCell>
+                            {run.status === 'success' ? (
+                              <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 flex w-fit items-center gap-1">
+                                <CheckCircle2 className="h-3 w-3" />
+                                <span>Success</span>
+                              </Badge>
+                            ) : run.status === 'running' ? (
+                              <Badge variant="secondary" className="animate-pulse flex w-fit items-center gap-1">
+                                <RefreshCw className="h-3 w-3 animate-spin" />
+                                <span>Running</span>
+                              </Badge>
+                            ) : (
+                              <Badge variant="destructive" className="flex w-fit items-center gap-1">
+                                <XCircle className="h-3 w-3" />
+                                <span>Failed</span>
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-xs">
+                            <div>{formatDate(run.started_at)}</div>
+                            <div className="text-muted-foreground text-[11px]">{formatTimeAgo(run.started_at)}</div>
+                          </TableCell>
+                          <TableCell className="text-xs font-mono">{run.duration_ms} ms</TableCell>
+                          <TableCell className="text-xs font-mono">{formatBytes(run.size_bytes)}</TableCell>
+                          <TableCell>
+                            <div className="flex flex-wrap gap-1">
+                              {run.destinations?.map((dst: string) => (
+                                <Badge key={dst} variant="outline" className="text-[10px]">
+                                  {dst}
+                                </Badge>
+                              ))}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setSelectedRun(run)}
+                              className="h-8 px-2"
+                            >
+                              <Terminal className="h-4 w-4 mr-1 text-muted-foreground" />
+                              <span className="text-xs">Logs</span>
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+
+                  {/* Pagination Bar */}
+                  {totalRuns > 0 && (
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-border mt-4 text-xs text-muted-foreground">
+                      <div>
+                        Showing <span className="font-medium text-foreground">{(historyPage - 1) * historyPageSize + 1}</span> to{' '}
+                        <span className="font-medium text-foreground">{Math.min(historyPage * historyPageSize, totalRuns)}</span> of{' '}
+                        <span className="font-medium text-foreground">{totalRuns}</span> runs
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="mr-2">
+                          Page {historyPage} of {totalHistoryPages}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setHistoryPage((p) => Math.max(1, p - 1))}
+                          disabled={historyPage <= 1}
+                          className="h-8 px-2.5 gap-1"
+                        >
+                          <ChevronLeft className="h-3.5 w-3.5" />
+                          <span>Previous</span>
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setHistoryPage((p) => Math.min(totalHistoryPages, p + 1))}
+                          disabled={historyPage >= totalHistoryPages}
+                          className="h-8 px-2.5 gap-1"
+                        >
+                          <span>Next</span>
+                          <ChevronRight className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </CardContent>
           </Card>
@@ -444,8 +507,15 @@ export function DatabaseDetailPage() {
               Run ID: <span className="font-mono">{selectedRun?.id}</span> • Started: {selectedRun?.started_at ? formatDate(selectedRun.started_at) : ''}
             </DialogDescription>
           </DialogHeader>
-          <div className="flex-1 overflow-auto bg-zinc-950 text-zinc-100 p-4 rounded-md font-mono text-xs whitespace-pre-wrap leading-relaxed border border-zinc-800">
-            {selectedRun?.logs || 'No log output captured.'}
+          <div className="flex-1 overflow-auto bg-zinc-950 text-zinc-100 p-4 rounded-md font-mono text-xs whitespace-pre-wrap leading-relaxed border border-zinc-800 min-h-[200px]">
+            {loadingLogs ? (
+              <div className="flex items-center justify-center py-12 text-zinc-400 gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Loading execution logs...</span>
+              </div>
+            ) : (
+              logsData || 'No log output captured.'
+            )}
           </div>
         </DialogContent>
       </Dialog>

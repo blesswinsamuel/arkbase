@@ -155,6 +155,17 @@ type RunDetailOutput struct {
 	Body *db.Run
 }
 
+type RunLogsInput struct {
+	ID string `path:"id" doc:"Run UUID"`
+}
+
+type RunLogsOutput struct {
+	Body struct {
+		ID   string `json:"id" example:"run-123"`
+		Logs string `json:"logs" example:"[2026-09-14T00:00:00Z] Backup started..."`
+	}
+}
+
 type StatsOutput struct {
 	Body *db.SummaryStats
 }
@@ -354,6 +365,24 @@ func (s *Server) registerRoutes(api huma.API) {
 			return nil, huma.Error404NotFound("run not found")
 		}
 		return &RunDetailOutput{Body: run}, nil
+	})
+
+	// GET /api/v1/history/{id}/logs
+	huma.Register(api, huma.Operation{
+		OperationID: "get-run-logs",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/history/{id}/logs",
+		Summary:     "Get run execution output logs",
+		Tags:        []string{"History"},
+	}, func(ctx context.Context, input *RunLogsInput) (*RunLogsOutput, error) {
+		logs, err := s.store.GetRunLogs(ctx, input.ID)
+		if err != nil {
+			return nil, huma.Error404NotFound("run logs not found")
+		}
+		resp := &RunLogsOutput{}
+		resp.Body.ID = input.ID
+		resp.Body.Logs = logs
+		return resp, nil
 	})
 
 	// GET /api/v1/stats

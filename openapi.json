@@ -441,6 +441,37 @@
         ],
         "type": "object"
       },
+      "RunLogsOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "https://example.com/schemas/RunLogsOutputBody.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "id": {
+            "examples": [
+              "run-123"
+            ],
+            "type": "string"
+          },
+          "logs": {
+            "examples": [
+              "[2026-09-14T00:00:00Z] Backup started..."
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "logs"
+        ],
+        "type": "object"
+      },
       "StatusOutputBody": {
         "additionalProperties": false,
         "properties": {
@@ -952,6 +983,49 @@
           }
         },
         "summary": "Get run execution details and logs",
+        "tags": [
+          "History"
+        ]
+      }
+    },
+    "/api/v1/history/{id}/logs": {
+      "get": {
+        "operationId": "get-run-logs",
+        "parameters": [
+          {
+            "description": "Run UUID",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Run UUID",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunLogsOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Get run execution output logs",
         "tags": [
           "History"
         ]

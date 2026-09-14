@@ -58,4 +58,44 @@ func TestStore(t *testing.T) {
 	if stats.LastBackupAt == nil {
 		t.Errorf("expected LastBackupAt to be non-nil, got nil")
 	}
+
+	// Verify GetRecentRuns does NOT return heavy logs
+	recentRuns, total, err := store.GetRecentRuns(ctx, 10, 0, "")
+	if err != nil {
+		t.Fatalf("failed to get recent runs: %v", err)
+	}
+	if total != 1 || len(recentRuns) != 1 {
+		t.Fatalf("expected 1 recent run, got total=%d len=%d", total, len(recentRuns))
+	}
+	if recentRuns[0].Logs != "" {
+		t.Errorf("expected GetRecentRuns to omit logs, got %q", recentRuns[0].Logs)
+	}
+
+	// Verify GetRunLogs fetches logs
+	logs, err := store.GetRunLogs(ctx, runID)
+	if err != nil {
+		t.Fatalf("failed to get run logs: %v", err)
+	}
+	if logs != "backup completed" {
+		t.Errorf("expected 'backup completed', got %q", logs)
+	}
+
+	// Verify PruneRuns
+	// Cutoff in the past: nothing pruned
+	pruned, err := store.PruneRuns(ctx, time.Now().UTC().Add(-1*time.Hour))
+	if err != nil {
+		t.Fatalf("failed to prune runs: %v", err)
+	}
+	if pruned != 0 {
+		t.Errorf("expected 0 pruned, got %d", pruned)
+	}
+
+	// Cutoff in the future: run is pruned
+	pruned, err = store.PruneRuns(ctx, time.Now().UTC().Add(1*time.Hour))
+	if err != nil {
+		t.Fatalf("failed to prune runs: %v", err)
+	}
+	if pruned != 1 {
+		t.Errorf("expected 1 pruned, got %d", pruned)
+	}
 }

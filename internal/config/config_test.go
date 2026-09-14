@@ -72,6 +72,9 @@ notifications:
 	if cfg.Server.Port != 9090 {
 		t.Errorf("expected port 9090, got %d", cfg.Server.Port)
 	}
+	if cfg.Server.HistoryRetentionDays != 90 {
+		t.Errorf("expected default history retention 90 days, got %d", cfg.Server.HistoryRetentionDays)
+	}
 	if cfg.Server.Auth.Password != "secret123" {
 		t.Errorf("expected expanded password 'secret123', got '%s'", cfg.Server.Auth.Password)
 	}

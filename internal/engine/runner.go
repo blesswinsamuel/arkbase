@@ -448,3 +448,22 @@ func (r *Runner) RestoreBackup(ctx context.Context, dbName, destName, backupPath
 	}
 	return nil
 }
+
+// PruneHistory removes backup_runs records older than HistoryRetentionDays.
+func (r *Runner) PruneHistory(ctx context.Context) (int64, error) {
+	days := r.cfg.Server.HistoryRetentionDays
+	if days <= 0 {
+		return 0, nil
+	}
+	cutoff := time.Now().UTC().Add(-time.Duration(days) * 24 * time.Hour)
+	pruned, err := r.store.PruneRuns(ctx, cutoff)
+	if err != nil {
+		log.Error().Err(err).Int("days", days).Msg("failed to prune old backup history")
+		return 0, err
+	}
+	if pruned > 0 {
+		log.Info().Int64("pruned_count", pruned).Int("retention_days", days).Msg("pruned old backup runs from history")
+	}
+	return pruned, nil
+}
+

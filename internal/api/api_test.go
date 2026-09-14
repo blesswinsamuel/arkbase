@@ -122,4 +122,49 @@ func TestAPI(t *testing.T) {
 	if recRestoreBad.Code != http.StatusBadRequest {
 		t.Errorf("expected 400 for restore with missing body, got %d", recRestoreBad.Code)
 	}
+
+	// 7. Seed a run and test GET /api/v1/history and GET /api/v1/history/{id}/logs
+	ctx := req.Context()
+	runID := "test-run-api-123"
+	_ = store.RecordStart(ctx, runID, "testdb", "postgres")
+	_ = store.RecordFinish(ctx, runID, "success", 2048, 500, []string{"local"}, "", "backup dump output logs here")
+
+	// Test GET /api/v1/history (logs should be empty in list)
+	reqHistory := httptest.NewRequest(http.MethodGet, "/api/v1/history?limit=10&offset=0", nil)
+	recHistory := httptest.NewRecorder()
+	r.ServeHTTP(recHistory, reqHistory)
+	if recHistory.Code != http.StatusOK {
+		t.Fatalf("expected 200 for history, got %d: %s", recHistory.Code, recHistory.Body.String())
+	}
+	var historyResp struct {
+		Runs  []db.Run `json:"runs"`
+		Total int      `json:"total"`
+	}
+	if err := json.Unmarshal(recHistory.Body.Bytes(), &historyResp); err != nil {
+		t.Fatalf("failed to unmarshal history response: %v", err)
+	}
+	if historyResp.Total != 1 || len(historyResp.Runs) != 1 {
+		t.Fatalf("expected 1 run in history, got total=%d len=%d", historyResp.Total, len(historyResp.Runs))
+	}
+	if historyResp.Runs[0].Logs != "" {
+		t.Errorf("expected history list to omit logs, got %q", historyResp.Runs[0].Logs)
+	}
+
+	// Test GET /api/v1/history/{id}/logs
+	reqLogs := httptest.NewRequest(http.MethodGet, "/api/v1/history/"+runID+"/logs", nil)
+	recLogs := httptest.NewRecorder()
+	r.ServeHTTP(recLogs, reqLogs)
+	if recLogs.Code != http.StatusOK {
+		t.Fatalf("expected 200 for run logs, got %d: %s", recLogs.Code, recLogs.Body.String())
+	}
+	var logsResp struct {
+		ID   string `json:"id"`
+		Logs string `json:"logs"`
+	}
+	if err := json.Unmarshal(recLogs.Body.Bytes(), &logsResp); err != nil {
+		t.Fatalf("failed to unmarshal logs response: %v", err)
+	}
+	if logsResp.Logs != "backup dump output logs here" {
+		t.Errorf("expected logs 'backup dump output logs here', got %q", logsResp.Logs)
+	}
 }

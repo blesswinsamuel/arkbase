@@ -17,9 +17,10 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	Port    int        `yaml:"port"`
-	DataDir string     `yaml:"data_dir"`
-	Auth    AuthConfig `yaml:"auth"`
+	Port                 int        `yaml:"port"`
+	DataDir              string     `yaml:"data_dir"`
+	HistoryRetentionDays int        `yaml:"history_retention_days"`
+	Auth                 AuthConfig `yaml:"auth"`
 }
 
 type AuthConfig struct {
@@ -129,6 +130,9 @@ func LoadConfig(filePath string) (*Config, error) {
 	}
 	if cfg.Server.DataDir == "" {
 		cfg.Server.DataDir = "/var/lib/arkbase"
+	}
+	if cfg.Server.HistoryRetentionDays == 0 {
+		cfg.Server.HistoryRetentionDays = 90
 	}
 
 	for name, db := range cfg.Databases {
