@@ -1,6 +1,7 @@
 package drivers
 
 import (
+	"bytes"
 	"compress/gzip"
 	"context"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
+	"strings"
 
 	"github.com/blesswinsamuel/arkbase/internal/config"
 )
@@ -51,7 +53,12 @@ func (p *PostgresDriver) Dump(ctx context.Context, dbCfg config.DatabaseConfig, 
 		cmd.Env = append(cmd.Env, "PGSSLMODE="+dbCfg.SSLMode)
 	}
 
-	cmd.Stderr = logWriter
+	var stderrBuf bytes.Buffer
+	var errWriter io.Writer = &stderrBuf
+	if logWriter != nil {
+		errWriter = io.MultiWriter(logWriter, &stderrBuf)
+	}
+	cmd.Stderr = errWriter
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -73,6 +80,9 @@ func (p *PostgresDriver) Dump(ctx context.Context, dbCfg config.DatabaseConfig, 
 	}
 
 	if err := cmd.Wait(); err != nil {
+		if stderrBuf.Len() > 0 {
+			return fmt.Errorf("pg_dump execution failed: %w: %s", err, strings.TrimSpace(stderrBuf.String()))
+		}
 		return fmt.Errorf("pg_dump execution failed: %w", err)
 	}
 
@@ -115,11 +125,20 @@ func (p *PostgresDriver) Restore(ctx context.Context, dbCfg config.DatabaseConfi
 		cmd.Env = append(cmd.Env, "PGSSLMODE="+dbCfg.SSLMode)
 	}
 
+	var stderrBuf bytes.Buffer
+	var errWriter io.Writer = &stderrBuf
+	if logWriter != nil {
+		errWriter = io.MultiWriter(logWriter, &stderrBuf)
+	}
+
 	cmd.Stdin = gr
 	cmd.Stdout = logWriter
-	cmd.Stderr = logWriter
+	cmd.Stderr = errWriter
 
 	if err := cmd.Run(); err != nil {
+		if stderrBuf.Len() > 0 {
+			return fmt.Errorf("psql restore execution failed: %w: %s", err, strings.TrimSpace(stderrBuf.String()))
+		}
 		return fmt.Errorf("psql restore execution failed: %w", err)
 	}
 

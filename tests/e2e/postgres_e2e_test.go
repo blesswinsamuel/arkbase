@@ -23,7 +23,7 @@ func TestPostgresBackupAndRestoreE2E(t *testing.T) {
 
 	// 1. Start source PostgreSQL container
 	sourceContainer, err := postgres.Run(ctx,
-		"postgres:17-alpine",
+		"postgres:16-alpine",
 		postgres.WithDatabase("sourcedb"),
 		postgres.WithUsername("arkuser"),
 		postgres.WithPassword("arkpass"),
@@ -58,7 +58,7 @@ func TestPostgresBackupAndRestoreE2E(t *testing.T) {
 
 	// 2. Start target PostgreSQL container (for testing restore)
 	targetContainer, err := postgres.Run(ctx,
-		"postgres:17-alpine",
+		"postgres:16-alpine",
 		postgres.WithDatabase("targetdb"),
 		postgres.WithUsername("arkuser"),
 		postgres.WithPassword("arkpass"),
