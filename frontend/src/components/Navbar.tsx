@@ -87,12 +87,6 @@ export function Navbar() {
 
         {/* Right: Actions */}
         <div className="flex items-center gap-2">
-          <a href="/docs" target="_blank" rel="noreferrer">
-            <Button variant="outline" size="sm" className="flex items-center gap-1.5 cursor-pointer">
-              <span>API Docs</span>
-              <ExternalLink className="h-3.5 w-3.5" />
-            </Button>
-          </a>
           <a href="https://github.com/blesswinsamuel/arkbase" target="_blank" rel="noreferrer">
             <Button variant="ghost" size="sm" className="flex items-center gap-1.5 cursor-pointer">
               <span>GitHub</span>
