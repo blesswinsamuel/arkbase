@@ -161,7 +161,7 @@ export function DatabaseDetailPage() {
 
       {/* Database Overview Header Card */}
       <Card>
-        <CardContent className="pt-6">
+        <CardContent>
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="space-y-1.5">
               <div className="flex items-center gap-2.5">
