@@ -301,12 +301,12 @@ spec:
 
 If you want to contribute or develop `arkbase` locally:
 
-**Prerequisites**: [`local-compose`](https://github.com/blesswinsamuel/local-compose), [Nix](https://nixos.org/), and [Bun](https://bun.sh/).
+**Prerequisites**: [`devyard`](https://github.com/blesswinsamuel/devyard), [Nix](https://nixos.org/), and [Bun](https://bun.sh/).
 
 ```bash
 git clone https://github.com/blesswinsamuel/arkbase.git
 cd arkbase
-local-compose up -d
+devyard up -d
 ```
 
 This automatically:
