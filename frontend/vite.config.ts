@@ -14,10 +14,10 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 18081,
     proxy: {
-      '/api': 'http://localhost:8080',
-      '/docs': 'http://localhost:8080',
-      '/openapi.json': 'http://localhost:8080',
-      '/metrics': 'http://localhost:8080',
+      '/api': 'http://localhost:18082',
+      '/docs': 'http://localhost:18082',
+      '/openapi.json': 'http://localhost:18082',
+      '/metrics': 'http://localhost:18082',
     },
   },
 });
