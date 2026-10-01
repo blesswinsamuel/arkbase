@@ -1,34 +1,30 @@
-version: "1"
 name: arkbase
-
-proxy:
-  default_service: web
+primary: web
 
 services:
   # 1. Native PostgreSQL 17 via Nix & Taskfile
   postgres:
-    command: task dev:postgres
-    healthcheck:
-      test: ["CMD", "nix", "shell", "nixpkgs#postgresql", "--command", "pg_isready", "-h", "localhost", "-p", "5432", "-U", "postgres", "-d", "dev_db"]
+    run: task dev:postgres
+    ready:
+      exec: nix shell nixpkgs#postgresql --command pg_isready -h localhost -p 5432 -U postgres -d dev_db
       interval: 1s
       retries: 25
       timeout: 2s
 
   # 2. Go API Server via Taskfile
   api:
-    command: task dev:api
+    run: task dev:api
     port: 18082
-    depends_on:
-      postgres: { condition: service_healthy }
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:18082/api/v1/status"]
+    depends_on: [postgres]
+    ready:
+      http:
+        path: /api/v1/status
       interval: 2s
       retries: 15
       timeout: 2s
 
   # 3. Vite React Frontend on 0.0.0.0:18081 via Taskfile
   web:
-    command: task dev:web
+    run: task dev:web
     port: 18081
-    depends_on:
-      api: { condition: service_healthy }
+    depends_on: [api]
