@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
-import { CheckCircle2, XCircle, Clock, Activity, Zap, RefreshCw, Terminal } from 'lucide-react';
+import { CheckCircle2, XCircle, Clock, Activity, Zap, RefreshCw } from 'lucide-react';
 import { formatBytes, formatDate, formatTimeAgo } from '@/lib/formatters';
 
 interface Props {
@@ -124,13 +124,13 @@ export function DatabasusBackupGraph({ runs, onSelectRun }: Props) {
                             : 'bg-red-500 hover:bg-red-400'
                         }`}
                       />
-                      <TooltipContent 
-                        side="top" 
+                      <TooltipContent
+                        side="top"
                         sideOffset={6}
-                        className="w-64 p-3 space-y-2 rounded-lg border shadow-xl bg-popover text-popover-foreground text-xs"
+                        className="flex w-64 flex-col items-stretch gap-2 rounded-lg border bg-popover p-3 text-xs text-popover-foreground shadow-xl [&>span]:bg-popover [&>span]:fill-popover"
                       >
                         {/* Header: Status & Relative Time */}
-                        <div className="flex items-center justify-between pb-1.5 border-b border-border/60">
+                        <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-border/60">
                           <div className="flex items-center gap-1.5 font-semibold">
                             {isSuccess ? (
                               <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
@@ -141,7 +141,7 @@ export function DatabasusBackupGraph({ runs, onSelectRun }: Props) {
                             )}
                             <span className="capitalize">{run.status}</span>
                           </div>
-                          <span className="text-[11px] text-muted-foreground font-mono">
+                          <span className="text-[11px] whitespace-nowrap text-muted-foreground font-mono">
                             {formatTimeAgo(run.started_at)}
                           </span>
                         </div>
@@ -151,31 +151,25 @@ export function DatabasusBackupGraph({ runs, onSelectRun }: Props) {
                           <div className="text-[11px] text-muted-foreground">
                             {formatDate(run.started_at)}
                           </div>
-                          <div className="flex items-center justify-between pt-0.5 text-xs font-mono">
-                            <span className="text-muted-foreground">Duration:</span>
-                            <span className="font-semibold text-foreground">{run.duration_ms} ms</span>
+                          <div className="flex items-center justify-between text-xs font-mono">
+                            <span className="text-muted-foreground">Duration</span>
+                            <span className="font-semibold whitespace-nowrap text-foreground">{run.duration_ms} ms</span>
                           </div>
                           <div className="flex items-center justify-between text-xs font-mono">
-                            <span className="text-muted-foreground">Output Size:</span>
-                            <span className="font-semibold text-foreground">{formatBytes(run.size_bytes)}</span>
+                            <span className="text-muted-foreground">Output Size</span>
+                            <span className="font-semibold whitespace-nowrap text-foreground">{formatBytes(run.size_bytes)}</span>
                           </div>
                         </div>
 
                         {/* Destinations */}
                         {run.destinations && run.destinations.length > 0 && (
-                          <div className="pt-1.5 border-t border-border/50 text-[11px] flex items-center justify-between">
-                            <span className="text-muted-foreground">Targets:</span>
-                            <span className="font-mono text-foreground font-medium truncate max-w-[150px]">
+                          <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-border/50 text-[11px]">
+                            <span className="shrink-0 text-muted-foreground">Targets</span>
+                            <span className="min-w-0 truncate font-mono font-medium text-foreground">
                               {run.destinations.join(', ')}
                             </span>
                           </div>
                         )}
-
-                        {/* Call to action */}
-                        <div className="pt-1 border-t border-border/50 text-[10px] text-primary font-medium flex items-center gap-1">
-                          <Terminal className="h-3 w-3" />
-                          <span>Click to inspect logs</span>
-                        </div>
                       </TooltipContent>
                     </Tooltip>
                   );
