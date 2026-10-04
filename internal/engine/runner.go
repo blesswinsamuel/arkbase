@@ -50,6 +50,21 @@ func NewRunner(cfg *config.Config, store *db.Store) (*Runner, error) {
 	}, nil
 }
 
+// RecoverStaleRuns marks runs left in 'running' state (e.g. by a previous process
+// restart or a failed status update) as failed, for every configured database.
+func (r *Runner) RecoverStaleRuns(ctx context.Context) {
+	for dbName := range r.cfg.Databases {
+		marked, err := r.store.MarkStaleRunsFailed(ctx, dbName)
+		if err != nil {
+			log.Error().Err(err).Str("database", dbName).Msg("failed to recover stale backup runs")
+			continue
+		}
+		if marked > 0 {
+			log.Warn().Int64("count", marked).Str("database", dbName).Msg("marked stale running backup runs as failed")
+		}
+	}
+}
+
 func (r *Runner) IsRunning(dbName string) bool {
 	r.runningMu.Lock()
 	defer r.runningMu.Unlock()
@@ -79,6 +94,15 @@ func (r *Runner) RunBackup(ctx context.Context, dbName string) (*db.Run, error) 
 	runID := uuid.New().String()
 	startTime := time.Now().UTC()
 	var logBuf bytes.Buffer
+
+	// Any previous run still marked 'running' for this database is orphaned
+	// (its RecordFinish either failed or was lost to a restart) - recover it
+	// before starting a new run so the history never shows zombie runs.
+	if marked, err := r.store.MarkStaleRunsFailed(ctx, dbName); err != nil {
+		log.Error().Err(err).Str("database", dbName).Msg("failed to recover stale backup runs")
+	} else if marked > 0 {
+		log.Warn().Int64("count", marked).Str("database", dbName).Msg("marked stale running backup runs as failed")
+	}
 
 	log.Info().Str("run_id", runID).Str("database", dbName).Msg("starting backup run")
 	fmt.Fprintf(&logBuf, "[%s] Starting backup for %s (engine: %s)\n", startTime.Format(time.RFC3339), dbName, dbCfg.Engine)
@@ -132,6 +156,7 @@ func (r *Runner) RunBackup(ctx context.Context, dbName string) (*db.Run, error) 
 	for _, destName := range dbCfg.Destinations {
 		destCfg, ok := r.cfg.Destinations[destName]
 		if !ok {
+			log.Warn().Str("run_id", runID).Str("database", dbName).Str("destination", destName).Msg("destination not found in config")
 			fmt.Fprintf(&logBuf, "[%s] WARN: Destination %q not found in config\n", time.Now().UTC().Format(time.RFC3339), destName)
 			continue
 		}
@@ -139,6 +164,7 @@ func (r *Runner) RunBackup(ctx context.Context, dbName string) (*db.Run, error) 
 		target := r.destinations[destName]
 		targetPath, err := interpolatePath(destCfg.Path, dbName, dbCfg.Engine, timestampStr)
 		if err != nil {
+			log.Error().Err(err).Str("run_id", runID).Str("database", dbName).Str("destination", destName).Msg("failed to interpolate destination path")
 			fmt.Fprintf(&logBuf, "[%s] ERROR: Path template for %s: %v\n", time.Now().UTC().Format(time.RFC3339), destName, err)
 			continue
 		}
@@ -154,6 +180,7 @@ func (r *Runner) RunBackup(ctx context.Context, dbName string) (*db.Run, error) 
 
 			encF, err := os.Create(encryptedFile)
 			if err != nil {
+				log.Error().Err(err).Str("run_id", runID).Str("database", dbName).Str("destination", destName).Msg("failed to create encryption staging file")
 				fmt.Fprintf(&logBuf, "[%s] ERROR: create encryption staging file: %v\n", time.Now().UTC().Format(time.RFC3339), err)
 				continue
 			}
@@ -161,6 +188,7 @@ func (r *Runner) RunBackup(ctx context.Context, dbName string) (*db.Run, error) 
 			srcF, err := os.Open(dumpRawFile)
 			if err != nil {
 				_ = encF.Close()
+				log.Error().Err(err).Str("run_id", runID).Str("database", dbName).Str("destination", destName).Msg("failed to open raw dump for encryption")
 				fmt.Fprintf(&logBuf, "[%s] ERROR: open raw dump for encryption: %v\n", time.Now().UTC().Format(time.RFC3339), err)
 				continue
 			}
@@ -170,6 +198,7 @@ func (r *Runner) RunBackup(ctx context.Context, dbName string) (*db.Run, error) 
 			_ = encF.Close()
 
 			if encErr != nil {
+				log.Error().Err(encErr).Str("run_id", runID).Str("database", dbName).Str("destination", destName).Msg("failed to encrypt dump")
 				fmt.Fprintf(&logBuf, "[%s] ERROR: encryption failed for %s: %v\n", time.Now().UTC().Format(time.RFC3339), destName, encErr)
 				continue
 			}
@@ -183,6 +212,7 @@ func (r *Runner) RunBackup(ctx context.Context, dbName string) (*db.Run, error) 
 		// Upload to target
 		upF, err := os.Open(uploadFile)
 		if err != nil {
+			log.Error().Err(err).Str("run_id", runID).Str("database", dbName).Str("destination", destName).Msg("failed to open file for upload")
 			fmt.Fprintf(&logBuf, "[%s] ERROR: open file for upload: %v\n", time.Now().UTC().Format(time.RFC3339), err)
 			continue
 		}
@@ -192,6 +222,7 @@ func (r *Runner) RunBackup(ctx context.Context, dbName string) (*db.Run, error) 
 		_ = upF.Close()
 
 		if saveErr != nil {
+			log.Error().Err(saveErr).Str("run_id", runID).Str("database", dbName).Str("destination", destName).Msg("failed uploading to destination")
 			fmt.Fprintf(&logBuf, "[%s] ERROR: failed uploading to %s: %v\n", time.Now().UTC().Format(time.RFC3339), destName, saveErr)
 			continue
 		}
@@ -224,7 +255,9 @@ func (r *Runner) RunBackup(ctx context.Context, dbName string) (*db.Run, error) 
 
 	// Success!
 	fmt.Fprintf(&logBuf, "[%s] Backup run finished successfully in %s\n", time.Now().UTC().Format(time.RFC3339), duration.Round(time.Millisecond))
-	_ = r.store.RecordFinish(ctx, runID, "success", rawSize, duration, successfulDests, "", logBuf.String())
+	if err := r.store.RecordFinish(ctx, runID, "success", rawSize, duration, successfulDests, "", logBuf.String()); err != nil {
+		log.Error().Err(err).Str("run_id", runID).Str("database", dbName).Msg("failed to record backup finish in store")
+	}
 
 	MetricBackupCount.WithLabelValues(dbName, "success").Inc()
 	MetricBackupDuration.WithLabelValues(dbName).Observe(duration.Seconds())
@@ -246,7 +279,9 @@ func (r *Runner) RunBackup(ctx context.Context, dbName string) (*db.Run, error) 
 
 func (r *Runner) recordFailure(ctx context.Context, runID, dbName, engine string, size int64, duration time.Duration, dests []string, errMsg, logs string) {
 	log.Error().Str("run_id", runID).Str("database", dbName).Str("error", errMsg).Msg("backup run failed")
-	_ = r.store.RecordFinish(ctx, runID, "failed", size, duration, dests, errMsg, logs)
+	if err := r.store.RecordFinish(ctx, runID, "failed", size, duration, dests, errMsg, logs); err != nil {
+		log.Error().Err(err).Str("run_id", runID).Str("database", dbName).Msg("failed to record backup failure in store")
+	}
 
 	MetricBackupCount.WithLabelValues(dbName, "failure").Inc()
 
@@ -466,4 +501,3 @@ func (r *Runner) PruneHistory(ctx context.Context) (int64, error) {
 	}
 	return pruned, nil
 }
-

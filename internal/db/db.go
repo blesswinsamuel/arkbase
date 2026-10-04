@@ -36,11 +36,11 @@ type Run struct {
 }
 
 type SummaryStats struct {
-	TotalDatabases  int   `json:"total_databases"`
-	TotalBackups    int   `json:"total_backups"`
-	SuccessfulCount int   `json:"successful_count"`
-	FailedCount     int   `json:"failed_count"`
-	TotalSizeBytes  int64 `json:"total_size_bytes"`
+	TotalDatabases  int        `json:"total_databases"`
+	TotalBackups    int        `json:"total_backups"`
+	SuccessfulCount int        `json:"successful_count"`
+	FailedCount     int        `json:"failed_count"`
+	TotalSizeBytes  int64      `json:"total_size_bytes"`
 	LastBackupAt    *time.Time `json:"last_backup_at,omitempty"`
 }
 
@@ -139,6 +139,54 @@ func (s *Store) GetRecentRuns(ctx context.Context, limit, offset int, dbFilter s
 	}
 
 	return runs, total, nil
+}
+
+// MarkStaleRunsFailed marks any runs still in 'running' state for the given database as failed.
+// It recovers rows orphaned by a process restart or by a silently failed RecordFinish,
+// so the execution history never shows a finished run as still running.
+func (s *Store) MarkStaleRunsFailed(ctx context.Context, dbName string) (int64, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, started_at FROM backup_runs WHERE status = 'running' AND database_name = ?`, dbName)
+	if err != nil {
+		return 0, fmt.Errorf("select stale runs: %w", err)
+	}
+
+	type staleRun struct {
+		id        string
+		startedAt time.Time
+	}
+	var stale []staleRun
+	for rows.Next() {
+		var r staleRun
+		if err := rows.Scan(&r.id, &r.startedAt); err != nil {
+			_ = rows.Close()
+			return 0, fmt.Errorf("scan stale run: %w", err)
+		}
+		stale = append(stale, r)
+	}
+	if err := rows.Err(); err != nil {
+		return 0, fmt.Errorf("iterate stale runs: %w", err)
+	}
+	_ = rows.Close()
+
+	const orphanedMsg = "orphaned run: never finalized (arkbase restarted or failed to record status)"
+	now := time.Now().UTC()
+	var marked int64
+	for _, run := range stale {
+		res, err := s.db.ExecContext(ctx, `
+		UPDATE backup_runs
+		SET status = 'failed', completed_at = ?, duration_ms = ?, error_message = ?
+		WHERE id = ? AND status = 'running'`,
+			now, now.Sub(run.startedAt).Milliseconds(), orphanedMsg, run.id)
+		if err != nil {
+			return marked, fmt.Errorf("mark stale run %s: %w", run.id, err)
+		}
+		affected, err := res.RowsAffected()
+		if err != nil {
+			return marked, fmt.Errorf("rows affected for stale run %s: %w", run.id, err)
+		}
+		marked += affected
+	}
+	return marked, nil
 }
 
 func (s *Store) GetRun(ctx context.Context, id string) (*Run, error) {

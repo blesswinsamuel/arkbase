@@ -99,3 +99,70 @@ func TestStore(t *testing.T) {
 		t.Errorf("expected 1 pruned, got %d", pruned)
 	}
 }
+
+func TestMarkStaleRunsFailed(t *testing.T) {
+	ctx := context.Background()
+	store, err := db.Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+	defer store.Close()
+
+	if err := store.RecordStart(ctx, "stale-1", "testdb", "postgres"); err != nil {
+		t.Fatalf("failed to record start: %v", err)
+	}
+	if err := store.RecordStart(ctx, "stale-2", "testdb", "postgres"); err != nil {
+		t.Fatalf("failed to record start: %v", err)
+	}
+	if err := store.RecordStart(ctx, "other-db", "otherdb", "postgres"); err != nil {
+		t.Fatalf("failed to record start: %v", err)
+	}
+
+	// Ensure measurable elapsed time for duration calculation
+	time.Sleep(10 * time.Millisecond)
+
+	marked, err := store.MarkStaleRunsFailed(ctx, "testdb")
+	if err != nil {
+		t.Fatalf("failed to mark stale runs: %v", err)
+	}
+	if marked != 2 {
+		t.Fatalf("expected 2 stale runs marked, got %d", marked)
+	}
+
+	for _, runID := range []string{"stale-1", "stale-2"} {
+		run, err := store.GetRun(ctx, runID)
+		if err != nil {
+			t.Fatalf("failed to get stale run: %v", err)
+		}
+		if run.Status != "failed" {
+			t.Errorf("expected failed, got %s", run.Status)
+		}
+		if run.CompletedAt == nil {
+			t.Errorf("expected completed_at to be set for run %s", runID)
+		}
+		if run.DurationMs <= 0 {
+			t.Errorf("expected positive duration_ms for run %s, got %d", run.ID, run.DurationMs)
+		}
+		if run.ErrorMessage == "" {
+			t.Errorf("expected error_message to be set for run %s", run.ID)
+		}
+	}
+
+	// Runs of other databases must be untouched
+	other, err := store.GetRun(ctx, "other-db")
+	if err != nil {
+		t.Fatalf("failed to get other run: %v", err)
+	}
+	if other.Status != "running" {
+		t.Errorf("expected other-db run to stay running, got %s", other.Status)
+	}
+
+	// Sweeping again marks nothing
+	marked, err = store.MarkStaleRunsFailed(ctx, "testdb")
+	if err != nil {
+		t.Fatalf("failed to re-sweep: %v", err)
+	}
+	if marked != 0 {
+		t.Errorf("expected 0 marked on re-sweep, got %d", marked)
+	}
+}

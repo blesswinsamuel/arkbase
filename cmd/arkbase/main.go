@@ -110,6 +110,10 @@ func runDaemon(configPath string) error {
 		return fmt.Errorf("init runner: %w", err)
 	}
 
+	// Recover runs orphaned by a previous process (restart mid-backup or a
+	// failed status update) so the history does not show them as still running.
+	runner.RecoverStaleRuns(context.Background())
+
 	scheduler, err := engine.NewScheduler(cfg, runner)
 	if err != nil {
 		return fmt.Errorf("init scheduler: %w", err)
