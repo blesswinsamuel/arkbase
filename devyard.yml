@@ -6,8 +6,10 @@ services:
   postgres:
     run: task dev:postgres
     ready:
-      exec: nix shell nixpkgs#postgresql --command pg_isready -h localhost -p 5432 -U postgres -d dev_db
-      interval: 1s
+      # A TCP connect is the same readiness signal as pg_isready but costs no
+      # process: the old exec probe ran `nix shell … pg_isready` every second.
+      tcp: {port: 5432}
+      interval: 5s
       retries: 25
       timeout: 2s
 
