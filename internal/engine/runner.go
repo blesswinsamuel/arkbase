@@ -149,106 +149,21 @@ func (r *Runner) RunBackup(ctx context.Context, dbName string) (*db.Run, error) 
 	rawSize := rawFi.Size()
 	fmt.Fprintf(&logBuf, "[%s] Dump succeeded. Size: %d bytes (%.2f MB)\n", time.Now().UTC().Format(time.RFC3339), rawSize, float64(rawSize)/(1024*1024))
 
-	var successfulDests []string
 	timestampStr := startTime.Format("20060102-150405")
-
-	// Upload to each configured destination
-	for _, destName := range dbCfg.Destinations {
-		destCfg, ok := r.cfg.Destinations[destName]
-		if !ok {
-			log.Warn().Str("run_id", runID).Str("database", dbName).Str("destination", destName).Msg("destination not found in config")
-			fmt.Fprintf(&logBuf, "[%s] WARN: Destination %q not found in config\n", time.Now().UTC().Format(time.RFC3339), destName)
-			continue
-		}
-
-		target := r.destinations[destName]
-		targetPath, err := interpolatePath(destCfg.Path, dbName, dbCfg.Engine, timestampStr)
-		if err != nil {
-			log.Error().Err(err).Str("run_id", runID).Str("database", dbName).Str("destination", destName).Msg("failed to interpolate destination path")
-			fmt.Fprintf(&logBuf, "[%s] ERROR: Path template for %s: %v\n", time.Now().UTC().Format(time.RFC3339), destName, err)
-			continue
-		}
-
-		// Check if encryption is required for this destination
-		uploadFile := dumpRawFile
-		uploadSize := rawSize
-		encryptedFile := ""
-
-		if destCfg.Encryption != nil && destCfg.Encryption.Enabled && destCfg.Encryption.Passphrase != "" {
-			encryptedFile = filepath.Join(tempDir, fmt.Sprintf("%s-%s-%s.enc", dbName, destName, runID))
-			defer os.Remove(encryptedFile)
-
-			encF, err := os.Create(encryptedFile)
-			if err != nil {
-				log.Error().Err(err).Str("run_id", runID).Str("database", dbName).Str("destination", destName).Msg("failed to create encryption staging file")
-				fmt.Fprintf(&logBuf, "[%s] ERROR: create encryption staging file: %v\n", time.Now().UTC().Format(time.RFC3339), err)
-				continue
-			}
-
-			srcF, err := os.Open(dumpRawFile)
-			if err != nil {
-				_ = encF.Close()
-				log.Error().Err(err).Str("run_id", runID).Str("database", dbName).Str("destination", destName).Msg("failed to open raw dump for encryption")
-				fmt.Fprintf(&logBuf, "[%s] ERROR: open raw dump for encryption: %v\n", time.Now().UTC().Format(time.RFC3339), err)
-				continue
-			}
-
-			encErr := encryption.EncryptStream(destCfg.Encryption.Passphrase, srcF, encF)
-			_ = srcF.Close()
-			_ = encF.Close()
-
-			if encErr != nil {
-				log.Error().Err(encErr).Str("run_id", runID).Str("database", dbName).Str("destination", destName).Msg("failed to encrypt dump")
-				fmt.Fprintf(&logBuf, "[%s] ERROR: encryption failed for %s: %v\n", time.Now().UTC().Format(time.RFC3339), destName, encErr)
-				continue
-			}
-
-			encFi, _ := os.Stat(encryptedFile)
-			uploadFile = encryptedFile
-			uploadSize = encFi.Size()
-			fmt.Fprintf(&logBuf, "[%s] Encrypted dump with AES-256-GCM. Encrypted size: %d bytes\n", time.Now().UTC().Format(time.RFC3339), uploadSize)
-		}
-
-		// Upload to target
-		upF, err := os.Open(uploadFile)
-		if err != nil {
-			log.Error().Err(err).Str("run_id", runID).Str("database", dbName).Str("destination", destName).Msg("failed to open file for upload")
-			fmt.Fprintf(&logBuf, "[%s] ERROR: open file for upload: %v\n", time.Now().UTC().Format(time.RFC3339), err)
-			continue
-		}
-
-		fmt.Fprintf(&logBuf, "[%s] Uploading to destination %q (%s) at %s...\n", time.Now().UTC().Format(time.RFC3339), destName, destCfg.Type, targetPath)
-		saveErr := target.Save(ctx, targetPath, upF, uploadSize)
-		_ = upF.Close()
-
-		if saveErr != nil {
-			log.Error().Err(saveErr).Str("run_id", runID).Str("database", dbName).Str("destination", destName).Msg("failed uploading to destination")
-			fmt.Fprintf(&logBuf, "[%s] ERROR: failed uploading to %s: %v\n", time.Now().UTC().Format(time.RFC3339), destName, saveErr)
-			continue
-		}
-
-		fmt.Fprintf(&logBuf, "[%s] Upload to %q succeeded\n", time.Now().UTC().Format(time.RFC3339), destName)
-		successfulDests = append(successfulDests, destName)
-
-		// Prune according to retention policy
-		if destCfg.Retention != nil {
-			prefix := filepath.Dir(targetPath)
-			items, listErr := target.List(ctx, prefix)
-			if listErr == nil {
-				_, pruneItems := retention.EvaluateRetention(destCfg.Retention, items, time.Now().UTC())
-				for _, item := range pruneItems {
-					if item.Path != targetPath {
-						fmt.Fprintf(&logBuf, "[%s] Pruning old snapshot: %s\n", time.Now().UTC().Format(time.RFC3339), item.Path)
-						_ = target.Delete(ctx, item.Path)
-					}
-				}
-			}
-		}
-	}
+	successfulDests, failedDests := r.deliverDump(ctx, dbName, dbCfg, runID, timestampStr, dumpRawFile, rawSize, tempDir, &logBuf)
 
 	duration := time.Since(startTime)
 	if len(successfulDests) == 0 && len(dbCfg.Destinations) > 0 {
 		errMsg := "all destination uploads failed"
+		r.recordFailure(ctx, runID, dbName, dbCfg.Engine, rawSize, duration, successfulDests, errMsg, logBuf.String())
+		return nil, fmt.Errorf("%s", errMsg)
+	}
+
+	// A backup is only as good as its worst destination: a run that reached the
+	// local disk but not object storage is a failed run, not a success.
+	if len(failedDests) > 0 {
+		errMsg := fmt.Sprintf("destination uploads failed: %s", strings.Join(failedDests, "; "))
+		fmt.Fprintf(&logBuf, "[%s] ERROR: %s\n", time.Now().UTC().Format(time.RFC3339), errMsg)
 		r.recordFailure(ctx, runID, dbName, dbCfg.Engine, rawSize, duration, successfulDests, errMsg, logBuf.String())
 		return nil, fmt.Errorf("%s", errMsg)
 	}
@@ -275,6 +190,120 @@ func (r *Runner) RunBackup(ctx context.Context, dbName string) (*db.Run, error) 
 	})
 
 	return r.store.GetRun(ctx, runID)
+}
+
+// deliverDump uploads the staged dump to every configured destination and then
+// enforces each destination's retention policy. It returns the destinations
+// that accepted the upload and one failure line per destination that did not.
+func (r *Runner) deliverDump(ctx context.Context, dbName string, dbCfg config.DatabaseConfig, runID, timestampStr, dumpRawFile string, rawSize int64, tempDir string, logBuf *bytes.Buffer) (succeeded, failures []string) {
+	for _, destName := range dbCfg.Destinations {
+		destCfg, ok := r.cfg.Destinations[destName]
+		if !ok {
+			log.Warn().Str("run_id", runID).Str("database", dbName).Str("destination", destName).Msg("destination not found in config")
+			fmt.Fprintf(logBuf, "[%s] WARN: Destination %q not found in config\n", time.Now().UTC().Format(time.RFC3339), destName)
+			failures = append(failures, fmt.Sprintf("%s: not found in config", destName))
+			continue
+		}
+
+		target := r.destinations[destName]
+		targetPath, err := interpolatePath(destCfg.Path, dbName, dbCfg.Engine, timestampStr)
+		if err != nil {
+			log.Error().Err(err).Str("run_id", runID).Str("database", dbName).Str("destination", destName).Msg("failed to interpolate destination path")
+			fmt.Fprintf(logBuf, "[%s] ERROR: Path template for %s: %v\n", time.Now().UTC().Format(time.RFC3339), destName, err)
+			failures = append(failures, fmt.Sprintf("%s: path template: %v", destName, err))
+			continue
+		}
+
+		if err := r.uploadDump(ctx, destName, destCfg, target, targetPath, dbName, runID, dumpRawFile, rawSize, tempDir, logBuf); err != nil {
+			log.Error().Err(err).Str("run_id", runID).Str("database", dbName).Str("destination", destName).Msg("failed uploading to destination")
+			fmt.Fprintf(logBuf, "[%s] ERROR: failed uploading to %s: %v\n", time.Now().UTC().Format(time.RFC3339), destName, err)
+			failures = append(failures, fmt.Sprintf("%s: %v", destName, err))
+		} else {
+			fmt.Fprintf(logBuf, "[%s] Upload to %q succeeded\n", time.Now().UTC().Format(time.RFC3339), destName)
+			succeeded = append(succeeded, destName)
+		}
+
+		// Retention is enforced even when this run's upload failed. A destination
+		// that is full or unreachable would otherwise keep every old backup it
+		// still holds, and stay full forever.
+		r.pruneDestination(ctx, destName, destCfg, target, targetPath, logBuf)
+	}
+	return succeeded, failures
+}
+
+// uploadDump encrypts the dump when the destination requires it and stores it.
+func (r *Runner) uploadDump(ctx context.Context, destName string, destCfg config.DestinationConfig, target storage.StorageTarget, targetPath, dbName, runID, dumpRawFile string, rawSize int64, tempDir string, logBuf *bytes.Buffer) error {
+	uploadFile := dumpRawFile
+	uploadSize := rawSize
+
+	if destCfg.Encryption != nil && destCfg.Encryption.Enabled && destCfg.Encryption.Passphrase != "" {
+		encryptedFile := filepath.Join(tempDir, fmt.Sprintf("%s-%s-%s.enc", dbName, destName, runID))
+		defer os.Remove(encryptedFile)
+
+		encF, err := os.Create(encryptedFile)
+		if err != nil {
+			return fmt.Errorf("create encryption staging file: %w", err)
+		}
+
+		srcF, err := os.Open(dumpRawFile)
+		if err != nil {
+			_ = encF.Close()
+			return fmt.Errorf("open raw dump for encryption: %w", err)
+		}
+
+		encErr := encryption.EncryptStream(destCfg.Encryption.Passphrase, srcF, encF)
+		_ = srcF.Close()
+		_ = encF.Close()
+
+		if encErr != nil {
+			return fmt.Errorf("encryption failed: %w", encErr)
+		}
+
+		encFi, err := os.Stat(encryptedFile)
+		if err != nil {
+			return fmt.Errorf("stat encrypted dump: %w", err)
+		}
+		uploadFile = encryptedFile
+		uploadSize = encFi.Size()
+		fmt.Fprintf(logBuf, "[%s] Encrypted dump with AES-256-GCM. Encrypted size: %d bytes\n", time.Now().UTC().Format(time.RFC3339), uploadSize)
+	}
+
+	upF, err := os.Open(uploadFile)
+	if err != nil {
+		return fmt.Errorf("open file for upload: %w", err)
+	}
+	defer upF.Close()
+
+	fmt.Fprintf(logBuf, "[%s] Uploading to destination %q (%s) at %s...\n", time.Now().UTC().Format(time.RFC3339), destName, destCfg.Type, targetPath)
+	return target.Save(ctx, targetPath, upF, uploadSize)
+}
+
+// pruneDestination deletes the backups the destination's retention policy no
+// longer keeps.
+func (r *Runner) pruneDestination(ctx context.Context, destName string, destCfg config.DestinationConfig, target storage.StorageTarget, targetPath string, logBuf *bytes.Buffer) {
+	if destCfg.Retention == nil {
+		return
+	}
+
+	items, err := target.List(ctx, filepath.Dir(targetPath))
+	if err != nil {
+		log.Warn().Err(err).Str("destination", destName).Msg("failed to list destination backups for pruning")
+		fmt.Fprintf(logBuf, "[%s] WARN: pruning %s skipped, list failed: %v\n", time.Now().UTC().Format(time.RFC3339), destName, err)
+		return
+	}
+
+	_, pruneItems := retention.EvaluateRetention(destCfg.Retention, items, time.Now().UTC())
+	for _, item := range pruneItems {
+		if item.Path == targetPath {
+			continue
+		}
+		if err := target.Delete(ctx, item.Path); err != nil {
+			log.Warn().Err(err).Str("destination", destName).Str("path", item.Path).Msg("failed to prune old backup")
+			fmt.Fprintf(logBuf, "[%s] WARN: failed to prune %s: %v\n", time.Now().UTC().Format(time.RFC3339), item.Path, err)
+			continue
+		}
+		fmt.Fprintf(logBuf, "[%s] Pruning old snapshot: %s\n", time.Now().UTC().Format(time.RFC3339), item.Path)
+	}
 }
 
 func (r *Runner) recordFailure(ctx context.Context, runID, dbName, engine string, size int64, duration time.Duration, dests []string, errMsg, logs string) {
